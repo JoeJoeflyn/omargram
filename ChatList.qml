@@ -581,12 +581,12 @@ Item {
           }
         }
 
-        // 3. Report Spam and Leave (in warning/urgent red)
+        // 3. Report Spam and Leave (in vivid red)
         Rectangle {
           width: parent.width
           height: Style.space(28)
           radius: Style.space(4)
-          color: reportMouse.containsMouse ? Qt.rgba(p.urgent.r, p.urgent.g, p.urgent.b, 0.15) : "transparent"
+          color: reportMouse.containsMouse ? Qt.rgba(p.danger.r, p.danger.g, p.danger.b, 0.15) : "transparent"
 
           Row {
             anchors.fill: parent
@@ -597,14 +597,14 @@ Item {
             Text {
               anchors.verticalCenter: parent.verticalCenter
               text: "\uf071"
-              color: p.urgent
+              color: p.danger
               font.family: p.fontFamily
               font.pixelSize: Style.font.caption
             }
             Text {
               anchors.verticalCenter: parent.verticalCenter
               text: "Report Spam & Leave"
-              color: p.urgent
+              color: p.danger
               font.family: p.fontFamily
               font.pixelSize: Style.font.bodySmall
               font.bold: true
@@ -629,7 +629,7 @@ Item {
           width: parent.width
           height: Style.space(28)
           radius: Style.space(4)
-          color: delChatMouse.containsMouse ? Qt.rgba(p.urgent.r, p.urgent.g, p.urgent.b, 0.15) : "transparent"
+          color: delChatMouse.containsMouse ? Qt.rgba(p.danger.r, p.danger.g, p.danger.b, 0.15) : "transparent"
 
           Row {
             anchors.fill: parent
@@ -639,17 +639,18 @@ Item {
 
             Text {
               anchors.verticalCenter: parent.verticalCenter
-              text: "\uf2ed"
-              color: p.urgent
+              text: "\uf1f8"
+              color: p.danger
               font.family: p.fontFamily
               font.pixelSize: Style.font.caption
             }
             Text {
               anchors.verticalCenter: parent.verticalCenter
               text: "Delete Chat"
-              color: p.urgent
+              color: p.danger
               font.family: p.fontFamily
               font.pixelSize: Style.font.bodySmall
+              font.bold: true
             }
           }
 

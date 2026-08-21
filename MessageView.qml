@@ -69,7 +69,7 @@ Item {
           visible: p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel)
           iconText: "\uf071"
           tooltipText: "Report spam and leave"
-          foreground: p.urgent; hoverColor: p.urgent; fontFamily: p.fontFamily
+          foreground: p.danger; hoverColor: p.danger; fontFamily: p.fontFamily
           onClicked: p.reportSpamAndLeave(p.selectedChat.id)
         }
 
@@ -78,7 +78,7 @@ Item {
           visible: p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel)
           iconText: "\uf2f5"
           tooltipText: (p.selectedChat && p.selectedChat.is_channel) ? "Leave channel" : "Leave group"
-          foreground: p.foreground; hoverColor: p.urgent; fontFamily: p.fontFamily
+          foreground: p.foreground; hoverColor: p.danger; fontFamily: p.fontFamily
           onClicked: p.leaveChat(p.selectedChat.id)
         }
 
@@ -1072,7 +1072,7 @@ Item {
           width: parent.width
           height: Style.space(28)
           radius: Style.space(4)
-          color: rmReactM.containsMouse ? Qt.rgba(p.urgent.r, p.urgent.g, p.urgent.b, 0.12) : "transparent"
+          color: rmReactM.containsMouse ? Qt.rgba(p.danger.r, p.danger.g, p.danger.b, 0.12) : "transparent"
 
           Row {
             anchors.fill: parent
@@ -1083,14 +1083,14 @@ Item {
             Text {
               anchors.verticalCenter: parent.verticalCenter
               text: "\uf00d"
-              color: p.urgent
+              color: p.danger
               font.family: p.fontFamily
               font.pixelSize: Style.font.caption
             }
             Text {
               anchors.verticalCenter: parent.verticalCenter
               text: "Remove Reaction"
-              color: p.urgent
+              color: p.danger
               font.family: p.fontFamily
               font.pixelSize: Style.font.bodySmall
             }
@@ -1381,7 +1381,7 @@ Item {
           width: parent.width
           height: Style.space(28)
           radius: Style.space(4)
-          color: delM.containsMouse ? Qt.rgba(p.urgent.r, p.urgent.g, p.urgent.b, 0.15) : "transparent"
+          color: delM.containsMouse ? Qt.rgba(p.danger.r, p.danger.g, p.danger.b, 0.15) : "transparent"
 
           Row {
             anchors.fill: parent
@@ -1392,14 +1392,14 @@ Item {
             Text {
               anchors.verticalCenter: parent.verticalCenter
               text: "\uf1f8"
-              color: p.urgent
+              color: p.danger
               font.family: p.fontFamily
               font.pixelSize: Style.font.caption
             }
             Text {
               anchors.verticalCenter: parent.verticalCenter
               text: "Delete Message"
-              color: p.urgent
+              color: p.danger
               font.family: p.fontFamily
               font.pixelSize: Style.font.bodySmall
               font.bold: true

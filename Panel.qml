@@ -19,6 +19,7 @@ Panel {
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
+  readonly property color danger: "#ef4444"
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property color surface: Color.popups.background
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
