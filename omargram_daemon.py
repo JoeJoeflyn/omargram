@@ -36,7 +36,7 @@ os.makedirs(OMARGRAM_RUN_DIR, mode=0o700, exist_ok=True)
 
 try:
     from telethon import TelegramClient, events, functions, types
-    from telethon.tl.types import User, Chat, Channel, MessageMediaPhoto, MessageMediaDocument
+    from telethon.tl.types import User, Chat, Channel, MessageMediaPhoto, MessageMediaDocument, MessageMediaWebPage, WebPage
     import qrcode
 except ImportError as e:
     print(f"Required library missing: {e}", file=sys.stderr)
@@ -288,6 +288,7 @@ class OmarGramDaemon:
 
                 media_type = ""
                 media_path = ""
+                webpage_meta = None
                 if m.media:
                     if isinstance(m.media, MessageMediaPhoto):
                         media_type = "photo"
@@ -301,6 +302,27 @@ class OmarGramDaemon:
                             media_path = photo_f
                     elif isinstance(m.media, MessageMediaDocument):
                         media_type = "document"
+                    elif isinstance(m.media, MessageMediaWebPage) and isinstance(m.media.webpage, WebPage):
+                        media_type = "webpage"
+                        wp = m.media.webpage
+                        wp_photo = ""
+                        if wp.photo:
+                            wp_photo_f = os.path.join(MEDIA_DIR, f"webpage_{m.id}_{cid}.jpg")
+                            if not os.path.exists(wp_photo_f):
+                                try:
+                                    await self.client.download_media(wp.photo, file=wp_photo_f)
+                                except Exception:
+                                    pass
+                            if os.path.exists(wp_photo_f):
+                                wp_photo = wp_photo_f
+
+                        webpage_meta = {
+                            "site_name": getattr(wp, "site_name", "") or "",
+                            "title": getattr(wp, "title", "") or "",
+                            "description": getattr(wp, "description", "") or "",
+                            "url": getattr(wp, "url", "") or getattr(wp, "display_url", "") or "",
+                            "photo": wp_photo
+                        }
 
                 dt = m.date
                 time_str = dt.strftime("%H:%M") if dt else ""
@@ -325,6 +347,7 @@ class OmarGramDaemon:
                     "is_read": is_read,
                     "media_type": media_type,
                     "media_path": media_path,
+                    "webpage": webpage_meta,
                     "reply_to_msg_id": m.reply_to_msg_id if hasattr(m, "reply_to_msg_id") else None
                 })
             return result

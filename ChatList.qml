@@ -316,58 +316,30 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           height: Style.space(36)
 
-          // Top row: Title + Time / Delete button (Fixed layout, 0 jump/shake)
+          // Top row: Title + Time
           Item {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
             height: Style.space(18)
 
-            // Right Action Container (Static width = no shaking)
-            Item {
-              id: topActionBox
+            // Time
+            Text {
+              id: timeText
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              width: Style.space(46)
-              height: parent.height
-
-              // Time (visible by default)
-              Text {
-                id: timeText
-                visible: !rowMouse.containsMouse
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.PlainText
-                text: (modelData.last_message && modelData.last_message.time) ? modelData.last_message.time : ""
-                color: modelData.unread_count > 0 ? Color.accent : p.dim
-                font.family: p.fontFamily
-                font.pixelSize: Style.font.caption * 0.8
-              }
-
-              // Delete Chat icon on hover
-              Text {
-                visible: rowMouse.containsMouse
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                text: "\uf2ed"
-                color: delMouse.containsMouse ? p.urgent : p.dim
-                font.family: p.fontFamily
-                font.pixelSize: Style.font.caption * 0.9
-
-                MouseArea {
-                  id: delMouse
-                  anchors.fill: parent; anchors.margins: -4
-                  hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                  onClicked: p.deleteChat(modelData.id)
-                }
-              }
+              textFormat: Text.PlainText
+              text: (modelData.last_message && modelData.last_message.time) ? modelData.last_message.time : ""
+              color: modelData.unread_count > 0 ? Color.accent : p.dim
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption * 0.8
             }
 
-            // Chat Title (anchored with fixed right margin = 0 jitter)
+            // Chat Title
             Text {
               anchors.left: parent.left
-              anchors.right: topActionBox.left
-              anchors.rightMargin: Style.space(4)
+              anchors.right: timeText.left
+              anchors.rightMargin: Style.space(6)
               anchors.verticalCenter: parent.verticalCenter
               textFormat: Text.PlainText
               text: modelData.title || "Chat"

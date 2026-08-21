@@ -343,6 +343,90 @@ Item {
             font.pixelSize: Style.font.bodySmall
           }
 
+          // Webpage / Social Media Link Preview Card
+          BorderSurface {
+            visible: modelData.webpage !== null && modelData.webpage !== undefined && (modelData.webpage.title !== "" || modelData.webpage.description !== "" || modelData.webpage.photo !== "")
+            width: parent.width
+            height: {
+              if (!modelData.webpage) return 0
+              var h = Style.space(34)
+              if (modelData.webpage.description) h += Style.space(26)
+              if (modelData.webpage.photo) h += Style.space(80)
+              return h
+            }
+            radius: Style.space(8)
+            color: msgRow.isOut ? Qt.rgba(0, 0, 0, 0.16) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.05)
+            borderSpec: Border.leftSpec(Color.accent, 2)
+            clip: true
+
+            MouseArea {
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                if (modelData.webpage && modelData.webpage.url) {
+                  Qt.openUrlExternally(modelData.webpage.url)
+                }
+              }
+            }
+
+            Column {
+              anchors.fill: parent
+              anchors.margins: Style.space(6)
+              spacing: Style.space(3)
+
+              // Site name (e.g. YouTube, Twitter / X, GitHub, Instagram)
+              Text {
+                visible: modelData.webpage && modelData.webpage.site_name !== ""
+                width: parent.width
+                textFormat: Text.PlainText
+                text: (modelData.webpage && modelData.webpage.site_name) ? modelData.webpage.site_name : ""
+                color: Color.accent
+                font.family: p.fontFamily
+                font.pixelSize: Style.font.caption * 0.8
+                font.bold: true
+                elide: Text.ElideRight
+              }
+
+              // Webpage Title
+              Text {
+                visible: modelData.webpage && modelData.webpage.title !== ""
+                width: parent.width
+                textFormat: Text.PlainText
+                text: (modelData.webpage && modelData.webpage.title) ? modelData.webpage.title : ""
+                color: msgRow.isOut ? "#ffffff" : p.foreground
+                font.family: p.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+                maximumLineCount: 1
+                elide: Text.ElideRight
+              }
+
+              // Webpage Description snippet
+              Text {
+                visible: modelData.webpage && modelData.webpage.description !== ""
+                width: parent.width
+                textFormat: Text.PlainText
+                text: (modelData.webpage && modelData.webpage.description) ? modelData.webpage.description : ""
+                color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.8) : p.dim
+                font.family: p.fontFamily
+                font.pixelSize: Style.font.caption * 0.85
+                maximumLineCount: (modelData.webpage && modelData.webpage.photo) ? 1 : 2
+                elide: Text.ElideRight
+              }
+
+              // Webpage Thumbnail Preview Image
+              Image {
+                visible: modelData.webpage && modelData.webpage.photo !== "" && modelData.webpage.photo !== undefined
+                width: parent.width
+                height: Style.space(75)
+                source: (modelData.webpage && modelData.webpage.photo) ? "file://" + modelData.webpage.photo : ""
+                fillMode: Image.PreserveAspectCrop
+                sourceSize.width: 400; sourceSize.height: 200
+              }
+            }
+          }
+
           // Timestamp and status row
           Row {
             anchors.right: parent.right
