@@ -303,139 +303,7 @@ Item {
         }
       }
 
-      // 3. Floating Quick Actions & Reaction Toolbar (Appears on hover above the bubble)
-      BorderSurface {
-        id: actionCapsule
-        visible: msgRow.isHovered && !msgRow.isSnapping
-        z: 20
-        anchors.bottom: bubbleSurface.top
-        anchors.bottomMargin: Style.space(2)
-        anchors.right: msgRow.isOut ? bubbleSurface.right : undefined
-        anchors.left: msgRow.isOut ? undefined : bubbleSurface.left
-        height: Style.space(26)
-        implicitWidth: capsuleRow.implicitWidth + Style.space(12)
-        radius: Style.space(13)
-        color: Color.popups.background
-        borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.18), 1)
-
-        MouseArea {
-          id: actionCapsuleMouse
-          anchors.fill: parent
-          hoverEnabled: true
-        }
-
-        Row {
-          id: capsuleRow
-          anchors.centerIn: parent
-          spacing: Style.space(2)
-
-          // Quick Reactions (👍 ❤️ 🔥 😂 👏)
-          Repeater {
-            model: ["👍", "❤️", "🔥", "😂", "👏"]
-            delegate: Item {
-              required property string modelData
-              width: Style.space(20); height: Style.space(20)
-
-              Text {
-                anchors.centerIn: parent
-                text: modelData
-                font.pixelSize: Style.space(11)
-                scale: emojiBtnMouse.containsMouse ? 1.25 : 1.0
-                Behavior on scale { NumberAnimation { duration: 100 } }
-              }
-
-              MouseArea {
-                id: emojiBtnMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                  p.sendReaction(p.selectedChat.id, msgRow.modelData.id, modelData)
-                }
-              }
-            }
-          }
-
-          // Separator Line
-          Rectangle {
-            width: 1; height: Style.space(12)
-            color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15)
-            anchors.verticalCenter: parent.verticalCenter
-          }
-
-          // Copy Text Button
-          Item {
-            width: Style.space(20); height: Style.space(20)
-            visible: msgRow.modelData.text !== ""
-            
-            Text {
-              anchors.centerIn: parent
-              text: "\uf0c5"
-              color: copyBtnMouse.containsMouse ? Color.accent : p.foreground
-              font.family: p.fontFamily
-              font.pixelSize: Style.space(9)
-            }
-
-            MouseArea {
-              id: copyBtnMouse
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: {
-                p.copyToClipboard(msgRow.modelData.text)
-              }
-            }
-          }
-
-          // Reply Button
-          Item {
-            width: Style.space(20); height: Style.space(20)
-            
-            Text {
-              anchors.centerIn: parent
-              text: "\uf112"
-              color: replyBtnMouse.containsMouse ? Color.accent : p.foreground
-              font.family: p.fontFamily
-              font.pixelSize: Style.space(9)
-            }
-
-            MouseArea {
-              id: replyBtnMouse
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: {
-                p.replyToMessage(msgRow.modelData)
-              }
-            }
-          }
-
-          // Delete Button
-          Item {
-            width: Style.space(20); height: Style.space(20)
-
-            Text {
-              anchors.centerIn: parent
-              text: "\uf2ed"
-              color: delCapsuleBtnMouse.containsMouse ? p.urgent : p.foreground
-              font.family: p.fontFamily
-              font.pixelSize: Style.space(9)
-            }
-
-            MouseArea {
-              id: delCapsuleBtnMouse
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: {
-                msgRow.snapAndRemove()
-              }
-            }
-          }
-        }
-      }
-
-      // 4. Message Bubble Surface
+      // 3. Message Bubble Surface
       BorderSurface {
         id: bubbleSurface
         anchors.left: msgRow.isOut ? undefined : leftAvatar.right
@@ -453,7 +321,16 @@ Item {
           id: bubbleMouse
           anchors.fill: parent
           hoverEnabled: true
+          acceptedButtons: Qt.LeftButton | Qt.RightButton
           cursorShape: Qt.ArrowCursor
+          onClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton) {
+              var pt = bubbleMouse.mapToItem(root, mouse.x, mouse.y)
+              msgContextMenu.targetMsg = modelData
+              msgContextMenu.targetRow = msgRow
+              msgContextMenu.showAt(pt.x, pt.y)
+            }
+          }
         }
 
         Column {
@@ -777,6 +654,234 @@ Item {
 
       particles = particles.concat(newPts)
       running = true
+    }
+  }
+
+  // Sleek Right-Click Context Menu for Messages (Reactions + Reply + Copy + Delete)
+  Item {
+    id: msgContextMenu
+    anchors.fill: parent
+    visible: targetMsg !== null
+    z: 999
+
+    property var targetMsg: null
+    property var targetRow: null
+    property real menuX: 0
+    property real menuY: 0
+
+    function showAt(px, py) {
+      menuX = Math.max(8, Math.min(px, root.width - msgMenuBox.width - 8))
+      menuY = Math.max(8, Math.min(py, root.height - msgMenuBox.implicitHeight - 8))
+    }
+
+    function hide() {
+      targetMsg = null
+      targetRow = null
+    }
+
+    // Dismiss backdrop
+    MouseArea {
+      anchors.fill: parent
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
+      onClicked: msgContextMenu.hide()
+    }
+
+    BorderSurface {
+      id: msgMenuBox
+      x: msgContextMenu.menuX
+      y: msgContextMenu.menuY
+      width: Style.space(200)
+      implicitHeight: msgMenuCol.implicitHeight + Style.space(8)
+      radius: Style.cornerRadius
+      color: Color.popups.background
+      borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15), 1)
+
+      Column {
+        id: msgMenuCol
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: Style.space(4)
+        spacing: Style.space(2)
+
+        // Top Emoji Reactions Row (👍 ❤️ 🔥 😂 👏 🎉)
+        BorderSurface {
+          width: parent.width
+          height: Style.space(34)
+          radius: Style.space(6)
+          color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.05)
+          borderSpec: Border.none
+
+          Row {
+            anchors.centerIn: parent
+            spacing: Style.space(6)
+
+            Repeater {
+              model: ["👍", "❤️", "🔥", "😂", "👏", "🎉"]
+              delegate: Item {
+                required property string modelData
+                width: Style.space(24); height: Style.space(24)
+
+                Text {
+                  anchors.centerIn: parent
+                  text: modelData
+                  font.pixelSize: Style.space(13)
+                  scale: emojiM.containsMouse ? 1.3 : 1.0
+                  Behavior on scale { NumberAnimation { duration: 90 } }
+                }
+
+                MouseArea {
+                  id: emojiM
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: {
+                    if (msgContextMenu.targetMsg) {
+                      p.sendReaction(p.selectedChat.id, msgContextMenu.targetMsg.id, modelData)
+                    }
+                    msgContextMenu.hide()
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // 1. Reply
+        Rectangle {
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: replyM.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf112"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Reply"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          MouseArea {
+            id: replyM
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (msgContextMenu.targetMsg) {
+                p.replyToMessage(msgContextMenu.targetMsg)
+              }
+              msgContextMenu.hide()
+            }
+          }
+        }
+
+        // 2. Copy Text
+        Rectangle {
+          visible: msgContextMenu.targetMsg && msgContextMenu.targetMsg.text !== ""
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: copyM.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf0c5"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Copy Text"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          MouseArea {
+            id: copyM
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (msgContextMenu.targetMsg) {
+                p.copyToClipboard(msgContextMenu.targetMsg.text)
+              }
+              msgContextMenu.hide()
+            }
+          }
+        }
+
+        // 3. Delete Message (with Thanos Disintegration)
+        Rectangle {
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: delM.containsMouse ? Qt.rgba(p.urgent.r, p.urgent.g, p.urgent.b, 0.15) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf2ed"
+              color: p.urgent
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Delete Message"
+              color: p.urgent
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+          }
+
+          MouseArea {
+            id: delM
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              var row = msgContextMenu.targetRow
+              var msg = msgContextMenu.targetMsg
+              msgContextMenu.hide()
+              if (row && typeof row.snapAndRemove === "function") {
+                row.snapAndRemove()
+              } else if (msg) {
+                p.deleteMessage(p.selectedChat.id, msg.id)
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
