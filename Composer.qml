@@ -3,20 +3,31 @@ import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 
-// Bottom message input composer capsule with instant send
+// Bottom message input composer capsule with instant send and edit support
 Item {
   id: root
   property var p  // Panel root
 
-  implicitHeight: (p.replyingTo ? Style.space(28) : 0) + Math.max(Style.space(42), inputCapsule.implicitHeight + Style.space(8))
+  implicitHeight: ((p.replyingTo || p.editingMessage) ? Style.space(28) : 0) + Math.max(Style.space(42), inputCapsule.implicitHeight + Style.space(8))
+
+  Connections {
+    target: p
+    function onEditingMessageChanged() {
+      if (p.editingMessage) {
+        inputArea.text = p.editingMessage.text || ""
+        inputArea.cursorPosition = inputArea.text.length
+        inputArea.forceActiveFocus()
+      }
+    }
+  }
 
   Column {
     anchors.fill: parent
     spacing: Style.space(2)
 
-    // Reply Quote Banner
+    // Edit / Reply Banner
     BorderSurface {
-      visible: p.replyingTo !== null
+      visible: p.replyingTo !== null || p.editingMessage !== null
       width: parent.width
       height: Style.space(26)
       radius: Style.space(6)
@@ -30,7 +41,7 @@ Item {
         spacing: Style.space(6)
 
         Text {
-          text: "\uf112"
+          text: p.editingMessage ? "\uf044" : "\uf112"
           color: Color.accent
           font.family: p.fontFamily
           font.pixelSize: Style.font.caption * 0.8
@@ -40,7 +51,7 @@ Item {
         Text {
           width: parent.width - Style.space(40)
           textFormat: Text.PlainText
-          text: (p.replyingTo ? (p.replyingTo.sender_name + ": " + (p.replyingTo.text || "Media")) : "")
+          text: p.editingMessage ? ("Edit: " + (p.editingMessage.text || "")) : (p.replyingTo ? (p.replyingTo.sender_name + ": " + (p.replyingTo.text || "Media")) : "")
           color: p.foreground
           font.family: p.fontFamily
           font.pixelSize: Style.font.caption * 0.85
@@ -50,18 +61,25 @@ Item {
 
         Text {
           text: "\uf00d"
-          color: cancelReplyMouse.containsMouse ? p.urgent : p.dim
+          color: cancelBannerMouse.containsMouse ? p.urgent : p.dim
           font.family: p.fontFamily
           font.pixelSize: Style.font.caption * 0.8
           anchors.verticalCenter: parent.verticalCenter
 
           MouseArea {
-            id: cancelReplyMouse
+            id: cancelBannerMouse
             anchors.fill: parent
             anchors.margins: -4
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: p.clearReply()
+            onClicked: {
+              if (p.editingMessage) {
+                p.cancelEditingMessage()
+                inputArea.text = ""
+              } else {
+                p.clearReply()
+              }
+            }
           }
         }
       }
@@ -102,7 +120,7 @@ Item {
           selectByMouse: true
           background: null
           leftPadding: 0; rightPadding: 0; topPadding: 0; bottomPadding: 0
-          placeholderText: (p.selectedChat ? "Message " + p.selectedChat.title + "..." : "Type a message...")
+          placeholderText: p.editingMessage ? "Edit message..." : (p.selectedChat ? "Message " + p.selectedChat.title + "..." : "Type a message...")
           placeholderTextColor: p.dim
 
           Keys.onReturnPressed: function(event) {
@@ -129,7 +147,7 @@ Item {
 
         Text {
           anchors.centerIn: parent
-          text: "\uf1d8"
+          text: p.editingMessage ? "\uf00c" : "\uf1d8"
           color: (inputArea.text.trim().length > 0) ? "#ffffff" : p.dim
           font.family: p.fontFamily
           font.pixelSize: Style.font.caption
@@ -151,7 +169,11 @@ Item {
     var txt = inputArea.text.trim()
     if (!txt || !p.selectedChat) return
     inputArea.text = ""
-    p.clearReply()
-    p.sendMessageToActiveChat(txt)
+    if (p.editingMessage) {
+      p.submitEditMessage(p.selectedChat.id, p.editingMessage.id, txt)
+    } else {
+      p.clearReply()
+      p.sendMessageToActiveChat(txt)
+    }
   }
 }

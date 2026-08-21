@@ -40,6 +40,12 @@ Panel {
   property var activeMessages: []
   property bool loadingMessages: false
 
+  property var editingMessage: null
+  property bool selectMode: false
+  property var selectedMsgIds: []
+  property bool forwardModalOpen: false
+  property var forwardMsgIds: []
+
   property string qrPath: ""
   property double qrTimestamp: 0
 
@@ -218,6 +224,160 @@ Panel {
     if (messagesCache[chatId]) {
       messagesCache[chatId] = messagesCache[chatId].filter(function(m) { return m.id !== messageId })
     }
+  }
+
+  // ---- Edit Message Actions
+  function startEditingMessage(msg) {
+    if (!msg) return
+    editingMessage = msg
+  }
+
+  function cancelEditingMessage() {
+    editingMessage = null
+  }
+
+  function submitEditMessage(chatId, messageId, newText) {
+    if (!chatId || !messageId || !newText) return
+    editingMessage = null
+
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "edit", String(chatId), String(messageId), newText]
+    actionProc.running = true
+
+    // Optimistically update message text in cache and activeMessages
+    var updated = []
+    for (var i = 0; i < activeMessages.length; i++) {
+      var m = Object.assign({}, activeMessages[i])
+      if (m.id === messageId) {
+        m.text = newText
+        m.is_edited = true
+      }
+      updated.push(m)
+    }
+    activeMessages = updated
+    if (messagesCache[chatId]) {
+      messagesCache[chatId] = updated
+    }
+  }
+
+  // ---- Pin / Unpin Actions
+  function pinMessage(chatId, messageId) {
+    if (!chatId || !messageId) return
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "pin", String(chatId), String(messageId)]
+    actionProc.running = true
+
+    var updated = []
+    for (var i = 0; i < activeMessages.length; i++) {
+      var m = Object.assign({}, activeMessages[i])
+      if (m.id === messageId) m.pinned = true
+      updated.push(m)
+    }
+    activeMessages = updated
+    if (messagesCache[chatId]) messagesCache[chatId] = updated
+  }
+
+  function unpinMessage(chatId, messageId) {
+    if (!chatId) return
+    actionProc.running = false
+    var args = ["unpin", String(chatId)]
+    if (messageId) args.push(String(messageId))
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", "")].concat(args)
+    actionProc.running = true
+
+    var updated = []
+    for (var i = 0; i < activeMessages.length; i++) {
+      var m = Object.assign({}, activeMessages[i])
+      if (!messageId || m.id === messageId) m.pinned = false
+      updated.push(m)
+    }
+    activeMessages = updated
+    if (messagesCache[chatId]) messagesCache[chatId] = updated
+  }
+
+  // ---- Multi-Select Actions
+  function enterSelectMode(initialMsgId) {
+    selectMode = true
+    selectedMsgIds = initialMsgId ? [initialMsgId] : []
+  }
+
+  function exitSelectMode() {
+    selectMode = false
+    selectedMsgIds = []
+  }
+
+  function toggleSelectMessage(msgId) {
+    if (!selectMode) selectMode = true
+    var list = (selectedMsgIds || []).slice()
+    var idx = list.indexOf(msgId)
+    if (idx >= 0) {
+      list.splice(idx, 1)
+    } else {
+      list.push(msgId)
+    }
+    selectedMsgIds = list
+  }
+
+  function isMessageSelected(msgId) {
+    return (selectedMsgIds || []).indexOf(msgId) >= 0
+  }
+
+  function deleteSelectedMessages() {
+    if (!selectedChat || !selectedMsgIds || selectedMsgIds.length === 0) return
+    var toDelete = selectedMsgIds.slice()
+    var cid = selectedChat.id
+
+    actionProc.running = false
+    var args = ["delete_batch", String(cid)].concat(toDelete.map(String))
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", "")].concat(args)
+    actionProc.running = true
+
+    activeMessages = activeMessages.filter(function(m) { return toDelete.indexOf(m.id) < 0 })
+    if (messagesCache[cid]) {
+      messagesCache[cid] = messagesCache[cid].filter(function(m) { return toDelete.indexOf(m.id) < 0 })
+    }
+    exitSelectMode()
+  }
+
+  function copySelectedMessagesText() {
+    if (!selectedMsgIds || selectedMsgIds.length === 0) return
+    var texts = []
+    for (var i = 0; i < activeMessages.length; i++) {
+      if (selectedMsgIds.indexOf(activeMessages[i].id) >= 0) {
+        var m = activeMessages[i]
+        texts.push((m.sender_name ? m.sender_name + ": " : "") + (m.text || ""))
+      }
+    }
+    if (texts.length > 0) {
+      copyToClipboard(texts.reverse().join("\n\n"))
+    }
+    exitSelectMode()
+  }
+
+  // ---- Forward Message Actions
+  function openForwardDialog(msgIds) {
+    if (!msgIds || msgIds.length === 0) return
+    forwardMsgIds = msgIds
+    forwardModalOpen = true
+  }
+
+  function closeForwardDialog() {
+    forwardModalOpen = false
+    forwardMsgIds = []
+  }
+
+  function executeForward(toChatId) {
+    if (!selectedChat || !toChatId || !forwardMsgIds || forwardMsgIds.length === 0) return
+    var fromCid = selectedChat.id
+    var ids = forwardMsgIds.slice()
+
+    actionProc.running = false
+    var args = ["forward", String(fromCid), String(toChatId)].concat(ids.map(String))
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", "")].concat(args)
+    actionProc.running = true
+
+    closeForwardDialog()
+    exitSelectMode()
   }
 
   function normEmoji(e) {
@@ -645,6 +805,210 @@ Panel {
               id: messageViewComp
               visible: root.selectedChat !== null
               p: root
+            }
+          }
+        }
+      }
+    }
+
+    // Forward Message Modal
+    Item {
+      id: forwardModal
+      visible: root.forwardModalOpen
+      anchors.fill: parent
+      z: 999
+
+      Rectangle {
+        anchors.fill: parent
+        color: Qt.rgba(0, 0, 0, 0.6)
+        MouseArea {
+          anchors.fill: parent
+          onClicked: root.closeForwardDialog()
+        }
+      }
+
+      BorderSurface {
+        width: Style.space(380)
+        height: Style.space(460)
+        anchors.centerIn: parent
+        radius: Style.space(12)
+        color: root.surface
+        borderSpec: Border.flat(root.dim, 1)
+
+        Column {
+          anchors.fill: parent
+          anchors.margins: Style.space(14)
+          spacing: Style.space(10)
+
+          // Header
+          Row {
+            width: parent.width
+            Text {
+              text: "Forward to..."
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+              width: parent.width - Style.space(30)
+            }
+            BorderSurface {
+              width: Style.space(24); height: Style.space(24)
+              radius: width / 2
+              color: closeFwdM.containsMouse ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12) : "transparent"
+              borderSpec: Border.none
+              Text {
+                anchors.centerIn: parent
+                text: "\uf00d"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.space(12)
+              }
+              MouseArea {
+                id: closeFwdM
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.closeForwardDialog()
+              }
+            }
+          }
+
+          // Search bar
+          BorderSurface {
+            width: parent.width
+            height: Style.space(32)
+            radius: Style.space(6)
+            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
+            borderSpec: Border.none
+
+            Row {
+              anchors.fill: parent
+              anchors.leftMargin: Style.space(8)
+              anchors.rightMargin: Style.space(8)
+              spacing: Style.space(6)
+
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "\uf002"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.space(11)
+              }
+
+              TextInput {
+                id: fwdSearchInput
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - Style.space(24)
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                selectByMouse: true
+                clip: true
+                Text {
+                  visible: !fwdSearchInput.text && !fwdSearchInput.activeFocus
+                  text: "Search chats..."
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
+              }
+            }
+          }
+
+          // Chats list
+          ListView {
+            width: parent.width
+            height: Style.space(340)
+            clip: true
+            spacing: Style.space(4)
+            model: {
+              var q = fwdSearchInput.text.trim().toLowerCase()
+              var list = root.allChats || []
+              if (q) {
+                list = list.filter(function(c) {
+                  return (c.title || "").toLowerCase().indexOf(q) >= 0 || (c.username || "").toLowerCase().indexOf(q) >= 0
+                })
+              }
+              return list
+            }
+
+            delegate: BorderSurface {
+              id: fwdChatRow
+              required property var modelData
+              required property int index
+              width: parent.width
+              height: Style.space(44)
+              radius: Style.space(6)
+              color: fwdRowM.containsMouse ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.15) : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.03)
+              borderSpec: Border.none
+
+              Row {
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(8)
+                anchors.rightMargin: Style.space(8)
+                spacing: Style.space(10)
+
+                // Avatar
+                BorderSurface {
+                  width: Style.space(30); height: Style.space(30)
+                  anchors.verticalCenter: parent.verticalCenter
+                  radius: width / 2
+                  color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2)
+                  borderSpec: Border.none
+                  clip: true
+
+                  Image {
+                    visible: modelData.avatar !== "" && modelData.avatar !== undefined
+                    anchors.fill: parent
+                    source: modelData.avatar ? "file://" + modelData.avatar : ""
+                    fillMode: Image.PreserveAspectCrop
+                  }
+                  Text {
+                    visible: !modelData.avatar
+                    anchors.centerIn: parent
+                    text: modelData.initials || "TG"
+                    color: Color.accent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.space(10)
+                    font.bold: true
+                  }
+                }
+
+                // Title
+                Column {
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: parent.width - Style.space(45)
+                  spacing: Style.space(2)
+
+                  Text {
+                    text: modelData.title || "Chat"
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    font.bold: true
+                    elide: Text.ElideRight
+                    width: parent.width
+                  }
+                  Text {
+                    text: modelData.username ? "@" + modelData.username : (modelData.is_channel ? "Channel" : (modelData.is_group ? "Group" : "User"))
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    elide: Text.ElideRight
+                    width: parent.width
+                  }
+                }
+              }
+
+              MouseArea {
+                id: fwdRowM
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  root.executeForward(modelData.id)
+                }
+              }
             }
           }
         }

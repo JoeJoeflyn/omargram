@@ -131,6 +131,43 @@ def main():
         chat_id = sys.argv[2]
         msg_id = sys.argv[3]
         print(json.dumps(send_daemon_cmd({"action": "delete_message", "chat_id": chat_id, "message_id": msg_id})))
+    elif action in ("delete_messages", "delete_batch"):
+        if len(sys.argv) < 4:
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py delete_batch <chat_id> <msg_id1> [msg_id2...]"}))
+            sys.exit(1)
+        chat_id = sys.argv[2]
+        msg_ids = sys.argv[3:]
+        print(json.dumps(send_daemon_cmd({"action": "delete_messages", "chat_id": chat_id, "message_ids": msg_ids})))
+    elif action == "edit":
+        if len(sys.argv) < 5:
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py edit <chat_id> <message_id> <text>"}))
+            sys.exit(1)
+        chat_id = sys.argv[2]
+        msg_id = sys.argv[3]
+        text = " ".join(sys.argv[4:])
+        print(json.dumps(send_daemon_cmd({"action": "edit_message", "chat_id": chat_id, "message_id": msg_id, "text": text})))
+    elif action == "pin":
+        if len(sys.argv) < 4:
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py pin <chat_id> <message_id>"}))
+            sys.exit(1)
+        chat_id = sys.argv[2]
+        msg_id = sys.argv[3]
+        print(json.dumps(send_daemon_cmd({"action": "pin_message", "chat_id": chat_id, "message_id": msg_id})))
+    elif action == "unpin":
+        if len(sys.argv) < 3:
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py unpin <chat_id> [message_id]"}))
+            sys.exit(1)
+        chat_id = sys.argv[2]
+        msg_id = sys.argv[3] if len(sys.argv) > 3 else None
+        print(json.dumps(send_daemon_cmd({"action": "unpin_message", "chat_id": chat_id, "message_id": msg_id})))
+    elif action == "forward":
+        if len(sys.argv) < 5:
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py forward <from_chat_id> <to_chat_id> <msg_id1> [msg_id2...]"}))
+            sys.exit(1)
+        from_chat_id = sys.argv[2]
+        to_chat_id = sys.argv[3]
+        msg_ids = sys.argv[4:]
+        print(json.dumps(send_daemon_cmd({"action": "forward_messages", "from_chat_id": from_chat_id, "to_chat_id": to_chat_id, "message_ids": msg_ids})))
     elif action in ("reaction", "send_reaction"):
         if len(sys.argv) < 4:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py reaction <chat_id> <message_id> [emoticon]"}))

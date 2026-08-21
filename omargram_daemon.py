@@ -380,6 +380,8 @@ class OmarGramDaemon:
                     "out": bool(m.out),
                     "status": msg_status,
                     "is_read": is_read,
+                    "pinned": bool(getattr(m, "pinned", False)),
+                    "is_edited": bool(getattr(m, "edit_date", None) is not None),
                     "reactions": reactions_list,
                     "media_type": media_type,
                     "media_path": media_path,
@@ -527,7 +529,96 @@ class OmarGramDaemon:
                     await self.client.delete_messages(entity, [mid], revoke=True)
                 except Exception:
                     await self.client.delete_messages(entity, [mid])
+                if cid in getattr(self, "chat_messages_cache", {}):
+                    del self.chat_messages_cache[cid]
                 return {"success": True, "chat_id": cid, "message_id": mid}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        elif action == "delete_messages":
+            chat_id = cmd_dict.get("chat_id")
+            msg_ids = cmd_dict.get("message_ids", [])
+            if not chat_id or not msg_ids:
+                return {"success": False, "error": "chat_id and message_ids required"}
+            try:
+                cid = int(chat_id)
+                entity = await self.client.get_entity(cid)
+                mids = [int(m) for m in msg_ids if str(m).isdigit()]
+                try:
+                    await self.client.delete_messages(entity, mids, revoke=True)
+                except Exception:
+                    await self.client.delete_messages(entity, mids)
+                if cid in getattr(self, "chat_messages_cache", {}):
+                    del self.chat_messages_cache[cid]
+                return {"success": True, "chat_id": cid, "deleted_count": len(mids)}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        elif action == "edit_message":
+            chat_id = cmd_dict.get("chat_id")
+            msg_id = cmd_dict.get("message_id")
+            text = cmd_dict.get("text", "")
+            if not chat_id or not msg_id:
+                return {"success": False, "error": "chat_id and message_id required"}
+            try:
+                cid = int(chat_id)
+                mid = int(msg_id)
+                entity = await self.client.get_entity(cid)
+                await self.client.edit_message(entity, mid, text)
+                if cid in getattr(self, "chat_messages_cache", {}):
+                    del self.chat_messages_cache[cid]
+                return {"success": True, "chat_id": cid, "message_id": mid, "text": text}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        elif action == "pin_message":
+            chat_id = cmd_dict.get("chat_id")
+            msg_id = cmd_dict.get("message_id")
+            if not chat_id or not msg_id:
+                return {"success": False, "error": "chat_id and message_id required"}
+            try:
+                cid = int(chat_id)
+                mid = int(msg_id)
+                entity = await self.client.get_entity(cid)
+                await self.client.pin_message(entity, mid, notify=True)
+                if cid in getattr(self, "chat_messages_cache", {}):
+                    del self.chat_messages_cache[cid]
+                return {"success": True, "chat_id": cid, "message_id": mid}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        elif action == "unpin_message":
+            chat_id = cmd_dict.get("chat_id")
+            msg_id = cmd_dict.get("message_id")
+            if not chat_id:
+                return {"success": False, "error": "chat_id required"}
+            try:
+                cid = int(chat_id)
+                entity = await self.client.get_entity(cid)
+                mid = int(msg_id) if msg_id else None
+                await self.client.unpin_message(entity, mid)
+                if cid in getattr(self, "chat_messages_cache", {}):
+                    del self.chat_messages_cache[cid]
+                return {"success": True, "chat_id": cid}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        elif action == "forward_messages":
+            from_chat_id = cmd_dict.get("from_chat_id")
+            to_chat_id = cmd_dict.get("to_chat_id")
+            msg_ids = cmd_dict.get("message_ids", [])
+            if not from_chat_id or not to_chat_id or not msg_ids:
+                return {"success": False, "error": "from_chat_id, to_chat_id, and message_ids required"}
+            try:
+                fcid = int(from_chat_id)
+                tcid = int(to_chat_id)
+                f_entity = await self.client.get_entity(fcid)
+                t_entity = await self.client.get_entity(tcid)
+                mids = [int(m) for m in msg_ids if str(m).isdigit()]
+                await self.client.forward_messages(t_entity, mids, f_entity)
+                if tcid in getattr(self, "chat_messages_cache", {}):
+                    del self.chat_messages_cache[tcid]
+                return {"success": True, "to_chat_id": tcid, "forwarded_count": len(mids)}
             except Exception as e:
                 return {"success": False, "error": str(e)}
 

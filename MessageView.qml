@@ -152,9 +152,107 @@ Item {
     color: Qt.rgba(1, 1, 1, 0.06)
   }
 
+  // Pinned Message Banner (Under Header)
+  property var pinnedMessage: {
+    if (!p.activeMessages) return null
+    for (var i = 0; i < p.activeMessages.length; i++) {
+      if (p.activeMessages[i].pinned) return p.activeMessages[i]
+    }
+    return null
+  }
+
+  BorderSurface {
+    id: pinnedBanner
+    visible: root.pinnedMessage !== null
+    anchors.top: chatHeader.bottom
+    anchors.topMargin: Style.space(2)
+    anchors.left: parent.left
+    anchors.leftMargin: Style.space(8)
+    anchors.right: parent.right
+    anchors.rightMargin: Style.space(8)
+    height: Style.space(32)
+    radius: Style.space(6)
+    color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.05)
+    borderSpec: Border.leftSpec(Color.accent, 2)
+    z: 10
+
+    Row {
+      anchors.fill: parent
+      anchors.leftMargin: Style.space(8)
+      anchors.rightMargin: Style.space(8)
+      spacing: Style.space(8)
+
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        text: "\uf08d"
+        color: Color.accent
+        font.family: p.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+
+      Column {
+        anchors.verticalCenter: parent.verticalCenter
+        width: parent.width - Style.space(45)
+        spacing: 1
+
+        Text {
+          text: "Pinned Message"
+          color: Color.accent
+          font.family: p.fontFamily
+          font.pixelSize: Style.space(9)
+          font.bold: true
+        }
+        Text {
+          text: root.pinnedMessage ? (root.pinnedMessage.text || "Media") : ""
+          color: p.foreground
+          font.family: p.fontFamily
+          font.pixelSize: Style.font.caption * 0.85
+          elide: Text.ElideRight
+          width: parent.width
+        }
+      }
+
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        text: "\uf00d"
+        color: unpinMouse.containsMouse ? p.urgent : p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.space(11)
+
+        MouseArea {
+          id: unpinMouse
+          anchors.fill: parent
+          anchors.margins: -4
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: {
+            if (root.pinnedMessage) p.unpinMessage(p.selectedChat.id, root.pinnedMessage.id)
+          }
+        }
+      }
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      anchors.rightMargin: Style.space(24)
+      cursorShape: Qt.PointingHandCursor
+      onClicked: {
+        if (root.pinnedMessage) {
+          for (var idx = 0; idx < p.activeMessages.length; idx++) {
+            if (p.activeMessages[idx].id === root.pinnedMessage.id) {
+              msgListView.positionViewAtIndex(idx, ListView.Center)
+              break
+            }
+          }
+        }
+      }
+    }
+  }
+
   // 2. Bottom Message Composer
   Composer {
     id: composerComp
+    visible: !p.selectMode
     p: root.p
     anchors.bottom: parent.bottom
     anchors.left: parent.left
@@ -162,12 +260,133 @@ Item {
     anchors.bottomMargin: Style.space(4)
   }
 
+  // Multi-Select Floating Action Bar
+  BorderSurface {
+    id: multiSelectBar
+    visible: p.selectMode
+    anchors.bottom: parent.bottom
+    anchors.bottomMargin: Style.space(8)
+    anchors.horizontalCenter: parent.horizontalCenter
+    width: Math.min(parent.width - Style.space(20), Style.space(340))
+    height: Style.space(40)
+    radius: Style.space(20)
+    color: Color.popups.background
+    borderSpec: Border.flat(Color.accent, 1)
+    z: 20
+
+    Row {
+      anchors.centerIn: parent
+      spacing: Style.space(12)
+
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        text: String(p.selectedMsgIds.length) + " selected"
+        color: p.foreground
+        font.family: p.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+      }
+
+      // Forward button
+      Row {
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(3)
+        opacity: p.selectedMsgIds.length > 0 ? 1.0 : 0.4
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: "\uf064"
+          color: Color.accent
+          font.family: p.fontFamily
+          font.pixelSize: Style.space(11)
+        }
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: "Forward"
+          color: Color.accent
+          font.family: p.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: true
+        }
+        MouseArea {
+          anchors.fill: parent
+          anchors.margins: -4
+          hoverEnabled: true
+          cursorShape: p.selectedMsgIds.length > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
+          onClicked: {
+            if (p.selectedMsgIds.length > 0) p.openForwardDialog(p.selectedMsgIds)
+          }
+        }
+      }
+
+      // Copy text button
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        text: "\uf0c5"
+        color: copySelM.containsMouse ? Color.accent : p.foreground
+        font.family: p.fontFamily
+        font.pixelSize: Style.space(12)
+        opacity: p.selectedMsgIds.length > 0 ? 1.0 : 0.4
+
+        MouseArea {
+          id: copySelM
+          anchors.fill: parent
+          anchors.margins: -6
+          hoverEnabled: true
+          cursorShape: p.selectedMsgIds.length > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
+          onClicked: {
+            if (p.selectedMsgIds.length > 0) p.copySelectedMessagesText()
+          }
+        }
+      }
+
+      // Delete button
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        text: "\uf2ed"
+        color: delSelM.containsMouse ? p.urgent : p.foreground
+        font.family: p.fontFamily
+        font.pixelSize: Style.space(12)
+        opacity: p.selectedMsgIds.length > 0 ? 1.0 : 0.4
+
+        MouseArea {
+          id: delSelM
+          anchors.fill: parent
+          anchors.margins: -6
+          hoverEnabled: true
+          cursorShape: p.selectedMsgIds.length > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
+          onClicked: {
+            if (p.selectedMsgIds.length > 0) p.deleteSelectedMessages()
+          }
+        }
+      }
+
+      // Cancel button
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        text: "\uf00d"
+        color: cancelSelM.containsMouse ? p.urgent : p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.space(12)
+
+        MouseArea {
+          id: cancelSelM
+          anchors.fill: parent
+          anchors.margins: -6
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: p.exitSelectMode()
+        }
+      }
+    }
+  }
+
   // 3. Middle Messages Stream ListView (BottomToTop = latest message at index 0 pinned to bottom)
   ListView {
     id: msgListView
-    anchors.top: chatHeader.bottom
+    anchors.top: pinnedBanner.visible ? pinnedBanner.bottom : chatHeader.bottom
     anchors.topMargin: Style.space(6)
-    anchors.bottom: composerComp.top
+    anchors.bottom: p.selectMode ? multiSelectBar.top : composerComp.top
     anchors.bottomMargin: Style.space(6)
     anchors.left: parent.left
     anchors.right: parent.right
@@ -286,11 +505,43 @@ Item {
         })
       }
 
+      readonly property bool isSelected: p.isMessageSelected(modelData.id)
+
+      // Selection Checkbox (Visible in selectMode)
+      BorderSurface {
+        id: selectCheck
+        visible: p.selectMode
+        width: Style.space(20); height: Style.space(20)
+        radius: width / 2
+        anchors.verticalCenter: bubbleSurface.verticalCenter
+        anchors.left: parent.left
+        anchors.leftMargin: Style.space(6)
+        color: msgRow.isSelected ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.1)
+        borderSpec: msgRow.isSelected ? Border.none : Border.flat(p.dim, 1)
+
+        Text {
+          visible: msgRow.isSelected
+          anchors.centerIn: parent
+          text: "\uf00c"
+          color: "#ffffff"
+          font.family: p.fontFamily
+          font.pixelSize: Style.space(10)
+        }
+
+        MouseArea {
+          anchors.fill: parent
+          anchors.margins: -4
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: p.toggleSelectMessage(modelData.id)
+        }
+      }
+
       // 1. Incoming Sender Avatar (Only in group/channel chats)
       Item {
         id: leftAvatar
         visible: !msgRow.isOut && (p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel))
-        anchors.left: parent.left
+        anchors.left: selectCheck.visible ? selectCheck.right : parent.left
         anchors.leftMargin: Style.space(8)
         anchors.bottom: bubbleSurface.bottom
         width: Style.space(28); height: Style.space(28)
@@ -327,15 +578,15 @@ Item {
       // 2. Message Bubble Surface
       BorderSurface {
         id: bubbleSurface
-        anchors.left: msgRow.isOut ? undefined : (leftAvatar.visible ? leftAvatar.right : parent.left)
-        anchors.leftMargin: msgRow.isOut ? 0 : (leftAvatar.visible ? Style.space(6) : Style.space(10))
+        anchors.left: msgRow.isOut ? undefined : (leftAvatar.visible ? leftAvatar.right : (selectCheck.visible ? selectCheck.right : parent.left))
+        anchors.leftMargin: msgRow.isOut ? 0 : (leftAvatar.visible ? Style.space(6) : (selectCheck.visible ? Style.space(8) : Style.space(10)))
         anchors.right: msgRow.isOut ? parent.right : undefined
         anchors.rightMargin: msgRow.isOut ? Style.space(10) : 0
         anchors.top: parent.top
         width: Math.min(msgListView.width * 0.72, Math.max(timeStatusRow.implicitWidth + Style.space(24), (modelData.media_path || (modelData.webpage && modelData.webpage.photo)) ? (msgListView.width * 0.65) : (bubbleText.implicitWidth + Style.space(20))))
         height: bubbleContentCol.implicitHeight + Style.space(14)
         radius: Style.space(16)
-        color: msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)
+        color: msgRow.isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.3) : (msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08))
         borderSpec: msgRow.isOut ? Border.none : Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.1), 1)
 
         MouseArea {
@@ -343,8 +594,12 @@ Item {
           anchors.fill: parent
           hoverEnabled: true
           acceptedButtons: Qt.LeftButton | Qt.RightButton
-          cursorShape: Qt.ArrowCursor
+          cursorShape: p.selectMode ? Qt.PointingHandCursor : Qt.ArrowCursor
           onClicked: function(mouse) {
+            if (p.selectMode) {
+              p.toggleSelectMessage(modelData.id)
+              return
+            }
             if (mouse.button === Qt.RightButton) {
               var pt = bubbleMouse.mapToItem(root, mouse.x, mouse.y)
               msgContextMenu.targetMsg = modelData
@@ -540,6 +795,28 @@ Item {
             id: timeStatusRow
             anchors.right: parent.right
             spacing: Style.space(4)
+
+            // Pinned indicator
+            Text {
+              visible: modelData.pinned === true
+              text: "\uf08d"
+              color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.8) : Color.accent
+              font.family: p.fontFamily
+              font.pixelSize: Style.space(7.5)
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            // Edited indicator
+            Text {
+              visible: modelData.is_edited === true
+              textFormat: Text.PlainText
+              text: "edited"
+              color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.7) : p.dim
+              font.family: p.fontFamily
+              font.pixelSize: Style.space(7.5)
+              font.italic: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
 
             Text {
               textFormat: Text.PlainText
@@ -871,7 +1148,184 @@ Item {
           }
         }
 
-        // 2. Copy Text
+        // 2. Edit (Only for outgoing messages)
+        Rectangle {
+          visible: msgContextMenu.targetMsg && msgContextMenu.targetMsg.out === true
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: editM.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf044"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Edit Message"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          MouseArea {
+            id: editM
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (msgContextMenu.targetMsg) {
+                p.startEditingMessage(msgContextMenu.targetMsg)
+              }
+              msgContextMenu.hide()
+            }
+          }
+        }
+
+        // 3. Pin / Unpin
+        Rectangle {
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: pinM.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf08d"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: (msgContextMenu.targetMsg && msgContextMenu.targetMsg.pinned) ? "Unpin Message" : "Pin Message"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          MouseArea {
+            id: pinM
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (msgContextMenu.targetMsg) {
+                if (msgContextMenu.targetMsg.pinned) {
+                  p.unpinMessage(p.selectedChat.id, msgContextMenu.targetMsg.id)
+                } else {
+                  p.pinMessage(p.selectedChat.id, msgContextMenu.targetMsg.id)
+                }
+              }
+              msgContextMenu.hide()
+            }
+          }
+        }
+
+        // 4. Forward
+        Rectangle {
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: fwdM.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf064"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Forward"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          MouseArea {
+            id: fwdM
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (msgContextMenu.targetMsg) {
+                p.openForwardDialog([msgContextMenu.targetMsg.id])
+              }
+              msgContextMenu.hide()
+            }
+          }
+        }
+
+        // 5. Select
+        Rectangle {
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: selM.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf058"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Select"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          MouseArea {
+            id: selM
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (msgContextMenu.targetMsg) {
+                p.enterSelectMode(msgContextMenu.targetMsg.id)
+              }
+              msgContextMenu.hide()
+            }
+          }
+        }
+
+        // 6. Copy Text
         Rectangle {
           visible: msgContextMenu.targetMsg && msgContextMenu.targetMsg.text !== ""
           width: parent.width
@@ -915,7 +1369,7 @@ Item {
           }
         }
 
-        // 3. Delete Message (with Thanos Disintegration)
+        // 7. Delete Message (with Thanos Disintegration)
         Rectangle {
           width: parent.width
           height: Style.space(28)
