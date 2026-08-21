@@ -223,6 +223,8 @@ class OmarGramDaemon:
                     if status_name == "UserStatusOnline":
                         online = True
 
+                read_outbox_max_id = getattr(d.dialog, 'read_outbox_max_id', 0) if hasattr(d, 'dialog') else 0
+
                 result.append({
                     "id": d.id,
                     "title": title,
@@ -231,6 +233,7 @@ class OmarGramDaemon:
                     "is_group": is_group,
                     "is_channel": is_channel,
                     "unread_count": unread,
+                    "read_outbox_max_id": read_outbox_max_id,
                     "avatar": avatar_path,
                     "initials": get_initials(title),
                     "color": get_avatar_color(title),
@@ -258,8 +261,14 @@ class OmarGramDaemon:
             cid = int(chat_id)
             entity = await self.client.get_entity(cid)
             messages = await self.client.get_messages(entity, limit=limit)
-            result = []
+            
+            read_outbox_max_id = 0
+            for d in self.dialogs_cache:
+                if d.get("id") == cid:
+                    read_outbox_max_id = d.get("read_outbox_max_id", 0)
+                    break
 
+            result = []
             for m in reversed(messages):
                 sender_name = "You" if m.out else ""
                 sender_avatar = ""
@@ -297,6 +306,9 @@ class OmarGramDaemon:
                 time_str = dt.strftime("%H:%M") if dt else ""
                 date_str = dt.strftime("%b %d, %Y") if dt else ""
 
+                is_read = bool(m.out and read_outbox_max_id > 0 and m.id <= read_outbox_max_id)
+                msg_status = "read" if is_read else ("sent" if m.out else "")
+
                 result.append({
                     "id": m.id,
                     "chat_id": cid,
@@ -309,6 +321,8 @@ class OmarGramDaemon:
                     "time": time_str,
                     "date": date_str,
                     "out": bool(m.out),
+                    "status": msg_status,
+                    "is_read": is_read,
                     "media_type": media_type,
                     "media_path": media_path,
                     "reply_to_msg_id": m.reply_to_msg_id if hasattr(m, "reply_to_msg_id") else None

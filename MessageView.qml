@@ -383,13 +383,26 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
             }
 
-            Text {
+            // Outgoing Message Status: Sent (single check ✓), Read/Seen (double check ✓✓)
+            Row {
               visible: msgRow.isOut
-              text: "\uf00c"
-              color: Qt.rgba(1, 1, 1, 0.85)
-              font.family: p.fontFamily
-              font.pixelSize: Style.space(8)
+              spacing: -3
               anchors.verticalCenter: parent.verticalCenter
+
+              Text {
+                text: "\uf00c"
+                color: (modelData.status === "read" || modelData.is_read) ? "#ffffff" : Qt.rgba(1, 1, 1, 0.7)
+                font.family: p.fontFamily
+                font.pixelSize: Style.space(8)
+              }
+
+              Text {
+                visible: modelData.status === "read" || modelData.is_read
+                text: "\uf00c"
+                color: "#ffffff"
+                font.family: p.fontFamily
+                font.pixelSize: Style.space(8)
+              }
             }
           }
         }
