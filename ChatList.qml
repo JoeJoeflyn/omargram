@@ -20,22 +20,22 @@ Item {
     // 1. User Profile Header Card
     BorderSurface {
       width: parent.width
-      height: Style.space(40)
+      height: Style.space(42)
       radius: Style.cornerRadius
       color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.04)
       borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.06), 1)
 
-      Row {
+      Item {
         anchors.fill: parent
         anchors.leftMargin: Style.space(8)
         anchors.rightMargin: Style.space(8)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(8)
 
-        // User Avatar
+        // User Avatar (Left)
         BorderSurface {
+          id: userAvatarBox
+          anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          width: Style.space(26); height: Style.space(26)
+          width: Style.space(28); height: Style.space(28)
           radius: width / 2.0
           color: Color.accent
           borderSpec: Border.none
@@ -46,7 +46,7 @@ Item {
             anchors.fill: parent
             source: p.userAvatar ? "file://" + p.userAvatar : ""
             fillMode: Image.PreserveAspectCrop
-            sourceSize.width: 52; sourceSize.height: 52
+            sourceSize.width: 56; sourceSize.height: 56
           }
 
           Text {
@@ -61,21 +61,10 @@ Item {
           }
         }
 
-        // User Name
+        // Logout Button (Right)
         Text {
-          width: parent.width - Style.space(70)
-          anchors.verticalCenter: parent.verticalCenter
-          textFormat: Text.PlainText
-          text: p.userName || "Connected"
-          color: p.foreground
-          font.family: p.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
-          elide: Text.ElideRight
-        }
-
-        // Logout Button
-        Text {
+          id: logoutBtn
+          anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
           text: "\uf2f5"
           color: logoutMouse.containsMouse ? p.urgent : p.dim
@@ -87,6 +76,37 @@ Item {
             anchors.fill: parent; anchors.margins: -4
             hoverEnabled: true; cursorShape: Qt.PointingHandCursor
             onClicked: p.logout()
+          }
+        }
+
+        // User Name Column (Fills space between avatar and logout)
+        Column {
+          anchors.left: userAvatarBox.right
+          anchors.leftMargin: Style.space(8)
+          anchors.right: logoutBtn.left
+          anchors.rightMargin: Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: 1
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            text: p.userName || "Connected"
+            color: p.foreground
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            text: p.userUsername ? "@" + p.userUsername : "Telegram"
+            color: p.dim
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.caption * 0.8
+            elide: Text.ElideRight
           }
         }
       }
