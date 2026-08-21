@@ -52,6 +52,9 @@ Panel {
   property bool forwardModalOpen: false
   property var forwardMsgIds: []
   property var attachedFile: null
+  property bool filePickerOpen: false
+  property string filePickerTab: "pictures"
+  property var pickerFiles: []
 
   property string qrPath: ""
   property double qrTimestamp: 0
@@ -535,7 +538,25 @@ Panel {
     pasteImageProc.running = true
   }
 
-  function openFilePicker() {
+  function openFilePicker(tab) {
+    filePickerTab = tab || "pictures"
+    filePickerOpen = true
+    loadPickerFiles(filePickerTab)
+  }
+
+  function loadPickerFiles(tab) {
+    filePickerTab = tab
+    pickerFilesProc.running = false
+    pickerFilesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "list_files", tab]
+    pickerFilesProc.running = true
+  }
+
+  function closeFilePicker() {
+    filePickerOpen = false
+  }
+
+  function openNativeFilePicker() {
+    closeFilePicker()
     pickFileProc.running = false
     pickFileProc.running = true
   }
@@ -772,6 +793,21 @@ Panel {
           var d = JSON.parse(text || "{}")
           if (d.success && d.file_path && !d.cancelled) {
             root.attachFile(d.file_path)
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+  Process {
+    id: pickerFilesProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(text || "{}")
+          if (d.success && d.files) {
+            root.pickerFiles = d.files
           }
         } catch (e) {}
       }
@@ -1125,6 +1161,260 @@ Panel {
                 onClicked: {
                   root.executeForward(modelData.id)
                 }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // In-Panel File & Media Picker Modal
+    Item {
+      id: filePickerModal
+      visible: root.filePickerOpen
+      anchors.fill: parent
+      z: 1000
+
+      Rectangle {
+        anchors.fill: parent
+        color: Qt.rgba(0, 0, 0, 0.65)
+        MouseArea {
+          anchors.fill: parent
+          onClicked: root.closeFilePicker()
+        }
+      }
+
+      BorderSurface {
+        width: Style.space(480)
+        height: Style.space(460)
+        anchors.centerIn: parent
+        radius: Style.space(12)
+        color: root.surface
+        borderSpec: Border.flat(root.dim, 1)
+
+        Column {
+          anchors.fill: parent
+          anchors.margins: Style.space(14)
+          spacing: Style.space(10)
+
+          // Header
+          Row {
+            width: parent.width
+            Text {
+              text: "Attach Media & Files"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+              width: parent.width - Style.space(30)
+            }
+            BorderSurface {
+              width: Style.space(24); height: Style.space(24)
+              radius: width / 2
+              color: closeFilePickerM.containsMouse ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12) : "transparent"
+              borderSpec: Border.none
+              Text {
+                anchors.centerIn: parent
+                text: "\uf00d"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.space(12)
+              }
+              MouseArea {
+                id: closeFilePickerM
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.closeFilePicker()
+              }
+            }
+          }
+
+          // Category Tabs Bar
+          Row {
+            width: parent.width
+            spacing: Style.space(6)
+
+            Repeater {
+              model: [
+                { id: "pictures", label: "Pictures & Screenshots", icon: "\uf03e" },
+                { id: "downloads", label: "Downloads", icon: "\uf019" }
+              ]
+
+              delegate: BorderSurface {
+                required property var modelData
+                height: Style.space(28)
+                radius: Style.space(6)
+                color: root.filePickerTab === modelData.id ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : (tabM.containsMouse ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08) : "transparent")
+                borderSpec: root.filePickerTab === modelData.id ? Border.controlSpec("active", root.foreground, Color.accent) : Border.none
+                implicitWidth: tabRow.implicitWidth + Style.space(16)
+
+                Row {
+                  id: tabRow
+                  anchors.centerIn: parent
+                  spacing: Style.space(6)
+
+                  Text {
+                    text: modelData.icon
+                    color: root.filePickerTab === modelData.id ? Color.accent : root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+
+                  Text {
+                    text: modelData.label
+                    color: root.filePickerTab === modelData.id ? root.foreground : root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: root.filePickerTab === modelData.id
+                  }
+                }
+
+                MouseArea {
+                  id: tabM
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.loadPickerFiles(modelData.id)
+                }
+              }
+            }
+          }
+
+          // Files Grid / List
+          ListView {
+            id: pickerList
+            width: parent.width
+            height: Style.space(310)
+            clip: true
+            spacing: Style.space(4)
+            model: root.pickerFiles
+
+            delegate: BorderSurface {
+              id: fileRow
+              required property var modelData
+              required property int index
+              width: parent.width
+              height: Style.space(48)
+              radius: Style.space(6)
+              color: fileRowM.containsMouse ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.15) : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.03)
+              borderSpec: Border.none
+
+              Row {
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(8)
+                anchors.rightMargin: Style.space(8)
+                spacing: Style.space(10)
+
+                // Thumbnail / Icon
+                BorderSurface {
+                  width: Style.space(36); height: Style.space(36)
+                  anchors.verticalCenter: parent.verticalCenter
+                  radius: Style.space(6)
+                  color: Qt.rgba(0, 0, 0, 0.3)
+                  borderSpec: Border.none
+                  clip: true
+
+                  Image {
+                    visible: modelData.is_image
+                    anchors.fill: parent
+                    source: modelData.is_image ? ("file://" + modelData.path) : ""
+                    fillMode: Image.PreserveAspectCrop
+                  }
+
+                  Text {
+                    visible: !modelData.is_image
+                    anchors.centerIn: parent
+                    text: "\uf15b"
+                    color: Color.accent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                  }
+                }
+
+                // Info
+                Column {
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: parent.width - Style.space(56)
+                  spacing: Style.space(2)
+
+                  Text {
+                    text: modelData.name || "File"
+                    textFormat: Text.PlainText
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    font.bold: true
+                    elide: Text.ElideRight
+                    width: parent.width
+                  }
+
+                  Text {
+                    text: (modelData.size ? ((modelData.size / 1024 > 1024) ? ((modelData.size / (1024*1024)).toFixed(1) + " MB") : (Math.round(modelData.size / 1024) + " KB")) : "")
+                    textFormat: Text.PlainText
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption * 0.85
+                    elide: Text.ElideRight
+                    width: parent.width
+                  }
+                }
+              }
+
+              MouseArea {
+                id: fileRowM
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  root.attachFile(modelData.path)
+                  root.closeFilePicker()
+                }
+              }
+            }
+          }
+
+          // Bottom Bar (Browse Dialog)
+          Row {
+            width: parent.width
+            height: Style.space(26)
+
+            Item { width: Style.space(1); height: parent.height }
+
+            BorderSurface {
+              anchors.right: parent.right
+              height: Style.space(24)
+              radius: Style.space(4)
+              color: nativePickM.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+              borderSpec: Border.none
+              implicitWidth: nativePickRow.implicitWidth + Style.space(12)
+
+              Row {
+                id: nativePickRow
+                anchors.centerIn: parent
+                spacing: Style.space(4)
+
+                Text {
+                  text: "\uf07c"
+                  color: Color.accent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+
+                Text {
+                  text: "Browse other files..."
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+              }
+
+              MouseArea {
+                id: nativePickM
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.openNativeFilePicker()
               }
             }
           }

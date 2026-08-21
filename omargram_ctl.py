@@ -209,6 +209,45 @@ def pick_file_dialog():
         return {"success": False, "error": str(e)}
     return {"success": True, "cancelled": True}
 
+def list_media_files(folder="pictures", limit=40):
+    home = os.path.expanduser("~")
+    if folder == "screenshots":
+        dirs = [os.path.join(home, "Pictures", "Screenshots"), os.path.join(home, "Pictures")]
+    elif folder == "downloads":
+        dirs = [os.path.join(home, "Downloads")]
+    elif folder == "pictures":
+        dirs = [os.path.join(home, "Pictures"), os.path.join(home, "Pictures", "Screenshots")]
+    else:
+        dirs = [os.path.expanduser(folder)]
+    
+    files = []
+    seen = set()
+    for d in dirs:
+        if not os.path.exists(d):
+            continue
+        try:
+            for entry in os.scandir(d):
+                if entry.is_file() and not entry.name.startswith("."):
+                    path = entry.path
+                    if path in seen:
+                        continue
+                    seen.add(path)
+                    st = entry.stat()
+                    ext = os.path.splitext(entry.name)[1].lower()
+                    is_img = ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg")
+                    files.append({
+                        "name": entry.name,
+                        "path": path,
+                        "size": st.st_size,
+                        "mtime": int(st.st_mtime),
+                        "is_image": is_img,
+                        "preview": "file://" + path if is_img else ""
+                    })
+        except Exception:
+            pass
+    files.sort(key=lambda x: x["mtime"], reverse=True)
+    return files[:limit]
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps(send_daemon_cmd({"action": "status"})))
@@ -218,6 +257,9 @@ def main():
 
     if action == "status":
         print(json.dumps(send_daemon_cmd({"action": "status"})))
+    elif action == "list_files":
+        folder = sys.argv[2] if len(sys.argv) > 2 else "pictures"
+        print(json.dumps({"success": True, "files": list_media_files(folder)}))
     elif action == "paste_image":
         print(json.dumps(extract_clipboard_image()))
     elif action == "pick_file":
