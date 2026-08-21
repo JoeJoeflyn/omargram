@@ -220,17 +220,31 @@ Panel {
     }
   }
 
+  function normEmoji(e) {
+    if (!e) return ""
+    return String(e).replace(/\uFE0F/g, "")
+  }
+
+  function displayEmoji(e) {
+    if (!e) return ""
+    var n = normEmoji(e)
+    if (n === "\u2764" || n === "❤") return "❤️"
+    return e
+  }
+
   function sendReaction(chatId, messageId, emoticon) {
     if (!chatId || !messageId) return
 
-    // Find if user already has an active chosen reaction on this message
+    var normInput = normEmoji(emoticon)
     var currentChosen = null
+
+    // Find if user already has an active chosen reaction on this message
     for (var i = 0; i < activeMessages.length; i++) {
       if (activeMessages[i].id === messageId) {
         var rx = activeMessages[i].reactions || []
         for (var k = 0; k < rx.length; k++) {
           if (rx[k].chosen) {
-            currentChosen = rx[k].emoticon
+            currentChosen = normEmoji(rx[k].emoticon)
             break
           }
         }
@@ -238,8 +252,8 @@ Panel {
       }
     }
 
-    var isRemoving = (emoticon === "clear" || emoticon === "remove" || currentChosen === emoticon)
-    var targetEmoticon = isRemoving ? "clear" : (emoticon || "👍")
+    var isRemoving = (normInput === "clear" || normInput === "remove" || currentChosen === normInput)
+    var targetEmoticon = isRemoving ? "clear" : (normInput || "👍")
 
     actionProc.running = false
     actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "reaction", String(chatId), String(messageId), targetEmoticon]
@@ -254,21 +268,23 @@ Panel {
         var rawList = m.reactions || []
         for (var j = 0; j < rawList.length; j++) {
           var item = Object.assign({}, rawList[j])
+          var itemNorm = normEmoji(item.emoticon)
           if (item.chosen) {
             item.count = Math.max(0, item.count - 1)
             item.chosen = false
           }
-          if (item.emoticon === targetEmoticon && !isRemoving) {
+          if (itemNorm === targetEmoticon && !isRemoving) {
             item.count += 1
             item.chosen = true
           }
           if (item.count > 0) {
+            item.emoticon = displayEmoji(item.emoticon)
             rList.push(item)
           }
         }
         // If adding a new emoji not currently in the reaction list
-        if (!isRemoving && targetEmoticon && targetEmoticon !== "clear" && !rList.some(function(r) { return r.emoticon === targetEmoticon })) {
-          rList.push({ emoticon: targetEmoticon, count: 1, chosen: true })
+        if (!isRemoving && targetEmoticon && targetEmoticon !== "clear" && !rList.some(function(r) { return normEmoji(r.emoticon) === targetEmoticon })) {
+          rList.push({ emoticon: displayEmoji(emoticon), count: 1, chosen: true })
         }
         m.reactions = rList
       }

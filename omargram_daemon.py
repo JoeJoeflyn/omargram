@@ -357,6 +357,8 @@ class OmarGramDaemon:
                         elif hasattr(r.reaction, "document_id"):
                             emoticon = "⭐"
                         if emoticon:
+                            if emoticon in ("\u2764", "❤"):
+                                emoticon = "❤️"
                             is_chosen = (getattr(r, "chosen_order", None) is not None) or bool(getattr(r, "chosen", False))
                             reactions_list.append({
                                 "emoticon": emoticon,

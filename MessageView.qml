@@ -461,8 +461,9 @@ Item {
                   spacing: Style.space(3)
 
                   Text {
-                    text: modelData.emoticon || "👍"
-                    font.pixelSize: Style.space(10)
+                    text: p.displayEmoji(modelData.emoticon) || "👍"
+                    font.family: "Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, sans-serif"
+                    font.pixelSize: Style.space(11)
                     anchors.verticalCenter: parent.verticalCenter
                   }
 
@@ -699,7 +700,7 @@ Item {
               model: ["👍", "❤️", "🔥", "😂", "👏", "🎉"]
               delegate: Item {
                 required property string modelData
-                readonly property bool isChosen: msgContextMenu.targetMsg && msgContextMenu.targetMsg.reactions && msgContextMenu.targetMsg.reactions.some(function(r) { return r.emoticon === modelData && r.chosen })
+                readonly property bool isChosen: msgContextMenu.targetMsg && msgContextMenu.targetMsg.reactions && msgContextMenu.targetMsg.reactions.some(function(r) { return p.normEmoji(r.emoticon) === p.normEmoji(modelData) && r.chosen })
                 width: Style.space(24); height: Style.space(24)
 
                 Rectangle {
@@ -710,7 +711,8 @@ Item {
 
                 Text {
                   anchors.centerIn: parent
-                  text: modelData
+                  text: p.displayEmoji(modelData)
+                  font.family: "Noto Color Emoji, Apple Color Emoji, Segoe UI Emoji, sans-serif"
                   font.pixelSize: Style.space(13)
                   scale: emojiM.containsMouse ? 1.3 : 1.0
                   Behavior on scale { NumberAnimation { duration: 90 } }
