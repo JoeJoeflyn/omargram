@@ -357,10 +357,11 @@ class OmarGramDaemon:
                         elif hasattr(r.reaction, "document_id"):
                             emoticon = "⭐"
                         if emoticon:
+                            is_chosen = (getattr(r, "chosen_order", None) is not None) or bool(getattr(r, "chosen", False))
                             reactions_list.append({
                                 "emoticon": emoticon,
                                 "count": r.count,
-                                "chosen": bool(getattr(r, "chosen", False))
+                                "chosen": is_chosen
                             })
 
                 result.append({
@@ -531,15 +532,19 @@ class OmarGramDaemon:
         elif action == "send_reaction":
             chat_id = cmd_dict.get("chat_id")
             msg_id = cmd_dict.get("message_id")
-            emoticon = cmd_dict.get("emoticon", "👍")
+            emoticon = cmd_dict.get("emoticon")
             if not chat_id or not msg_id:
                 return {"success": False, "error": "chat_id and message_id required"}
+            if emoticon in ("clear", "remove", "none", "rm", "delete", "empty", "", None):
+                emoticon = ""
             try:
                 cid = int(chat_id)
                 mid = int(msg_id)
                 entity = await self.client.get_entity(cid)
                 reaction_list = [ReactionEmoji(emoticon=emoticon)] if emoticon else []
                 await self.client(SendReactionRequest(peer=entity, msg_id=mid, reaction=reaction_list))
+                if cid in getattr(self, "chat_messages_cache", {}):
+                    del self.chat_messages_cache[cid]
                 return {"success": True, "chat_id": cid, "message_id": mid, "emoticon": emoticon}
             except Exception as e:
                 return {"success": False, "error": str(e)}

@@ -184,9 +184,20 @@ Item {
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
+    property real lastScrollY: 0
+
+    onContentYChanged: {
+      if (contentY > 10) {
+        lastScrollY = contentY
+      } else if (atYBeginning) {
+        lastScrollY = 0
+      }
+    }
+
     Connections {
       target: p
       function onSelectedChatChanged() {
+        msgListView.lastScrollY = 0
         msgListView.contentY = 0
         Qt.callLater(function() {
           msgListView.contentY = 0
@@ -194,11 +205,11 @@ Item {
         })
       }
       function onActiveMessagesChanged() {
-        // Preserve scroll position when reading history; never jump on reaction or background refresh!
-        if (!msgListView.moving && msgListView.atYBeginning) {
+        if (msgListView.lastScrollY > 10) {
+          msgListView.contentY = msgListView.lastScrollY
           Qt.callLater(function() {
-            if (msgListView.atYBeginning) {
-              msgListView.positionViewAtBeginning()
+            if (msgListView.lastScrollY > 10) {
+              msgListView.contentY = msgListView.lastScrollY
             }
           })
         }
