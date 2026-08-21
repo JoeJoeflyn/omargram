@@ -8,17 +8,19 @@ Item {
   id: root
   property var p  // Panel root
 
-  width: Style.space(220)
-  height: parent.height
+  width: Style.space(250)
+  anchors.top: parent.top
+  anchors.bottom: parent.bottom
+  anchors.left: parent.left
 
   Column {
     anchors.fill: parent
     spacing: Style.space(6)
 
-    // Search Box
+    // 1. Search Box
     BorderSurface {
       width: parent.width
-      implicitHeight: Style.space(28)
+      implicitHeight: Style.space(32)
       radius: Style.cornerRadius
       color: Color.popups.background
       borderSpec: Border.controlSpec(searchInput.activeFocus ? "focused" : "normal", p.foreground, Color.accent)
@@ -40,11 +42,11 @@ Item {
 
         TextInput {
           id: searchInput
-          width: parent.width - Style.space(40)
+          width: parent.width - Style.space(44)
           anchors.verticalCenter: parent.verticalCenter
           color: p.foreground
           font.family: p.fontFamily
-          font.pixelSize: Style.font.caption
+          font.pixelSize: Style.font.bodySmall
           selectByMouse: true
           clip: true
           text: p.searchQuery
@@ -55,7 +57,7 @@ Item {
             text: "Search chats..."
             color: p.dim
             font.family: p.fontFamily
-            font.pixelSize: Style.font.caption
+            font.pixelSize: Style.font.bodySmall
             anchors.verticalCenter: parent.verticalCenter
           }
         }
@@ -78,7 +80,7 @@ Item {
       }
     }
 
-    // Filter Chips (All, DMs, Groups, Channels)
+    // 2. Filter Chips (All, DMs, Groups, Channels)
     Row {
       width: parent.width
       spacing: Style.space(4)
@@ -94,9 +96,9 @@ Item {
         delegate: BorderSurface {
           required property var modelData
           readonly property bool isSelected: p.chatFilter === modelData.id
-          implicitHeight: Style.space(20)
+          implicitHeight: Style.space(22)
           implicitWidth: chipText.implicitWidth + Style.space(12)
-          radius: Style.space(10)
+          radius: Style.space(11)
           color: isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : "transparent"
           borderSpec: isSelected ? Border.flat(Color.accent, 1) : Border.flat(Qt.rgba(1, 1, 1, 0.08), 1)
 
@@ -118,13 +120,13 @@ Item {
       }
     }
 
-    // Chats ListView
+    // 3. Chats ListView
     ListView {
       id: chatListView
       width: parent.width
       height: parent.height - y
       clip: true
-      spacing: Style.space(2)
+      spacing: Style.space(3)
       boundsBehavior: Flickable.StopAtBounds
       model: p.filteredChats
 
@@ -136,7 +138,7 @@ Item {
         required property int index
         readonly property bool isSelected: p.selectedChat && p.selectedChat.id === modelData.id
         width: chatListView.width
-        implicitHeight: Style.space(48)
+        implicitHeight: Style.space(52)
         radius: Style.cornerRadius
         color: isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.18) : (rowMouse.containsMouse ? Style.hoverFillFor(p.foreground, Color.accent) : "transparent")
         borderSpec: isSelected ? Border.flat(Color.accent, 1) : Border.none
@@ -158,7 +160,7 @@ Item {
 
           // Avatar Item
           Item {
-            width: Style.space(34); height: Style.space(34)
+            width: Style.space(36); height: Style.space(36)
             anchors.verticalCenter: parent.verticalCenter
 
             BorderSurface {
@@ -173,7 +175,7 @@ Item {
                 anchors.fill: parent
                 source: modelData.avatar ? "file://" + modelData.avatar : ""
                 fillMode: Image.PreserveAspectCrop
-                sourceSize.width: 68; sourceSize.height: 68
+                sourceSize.width: 72; sourceSize.height: 72
               }
 
               Text {
@@ -201,7 +203,7 @@ Item {
 
           // Content Column
           Column {
-            width: parent.width - Style.space(46)
+            width: parent.width - Style.space(48)
             anchors.verticalCenter: parent.verticalCenter
             spacing: Style.space(2)
 

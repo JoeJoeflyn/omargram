@@ -274,6 +274,8 @@ class OmarGramDaemon:
                             sender_color = get_avatar_color(sender_name)
                     except Exception:
                         sender_name = "User"
+                    if not sender_avatar and cid in self.cached_avatars:
+                        sender_avatar = self.cached_avatars[cid]
 
                 media_type = ""
                 media_path = ""
@@ -301,6 +303,7 @@ class OmarGramDaemon:
                     "sender_id": m.sender_id,
                     "sender_name": sender_name,
                     "sender_avatar": sender_avatar,
+                    "sender_initials": get_initials(sender_name),
                     "sender_color": sender_color,
                     "text": m.message or "",
                     "time": time_str,

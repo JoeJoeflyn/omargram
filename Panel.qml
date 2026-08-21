@@ -156,6 +156,7 @@ Panel {
       chat_id: cid,
       sender_name: "You",
       sender_avatar: "",
+      sender_initials: "ME",
       sender_color: Color.accent,
       text: text,
       time: timeStr,
@@ -320,7 +321,7 @@ Panel {
   // Background Poll Timer
   Timer {
     id: pollTimer
-    interval: root.opened ? 2500 : 8000
+    interval: root.opened ? 2000 : 8000
     running: true; repeat: true; triggeredOnStart: true
     onTriggered: root.refresh()
   }
@@ -345,8 +346,8 @@ Panel {
     bar: root.bar
     open: root.opened
     centerOnBar: false
-    contentWidth: panel.fittedContentWidth(Style.space(640))
-    contentHeight: panel.fittedContentHeight(Style.space(480), Style.space(600))
+    contentWidth: panel.fittedContentWidth(Style.space(760))
+    contentHeight: panel.fittedContentHeight(Style.space(520), Style.space(640))
 
     onOpenChanged: {
       if (open) {
@@ -380,12 +381,11 @@ Panel {
         }
 
         // 2. Main Two-Column Layout (When logged in)
-        Row {
+        Item {
           id: mainView
           visible: root.isAuthorized
           anchors.fill: parent
           anchors.margins: Style.space(8)
-          spacing: Style.space(8)
 
           // Left Chats Sidebar
           ChatList {
@@ -395,25 +395,33 @@ Panel {
 
           // Vertical Separator
           Rectangle {
-            width: 1; height: parent.height
+            id: centerDivider
+            anchors.left: chatListComp.right
+            anchors.leftMargin: Style.space(8)
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1
             color: Qt.rgba(1, 1, 1, 0.07)
           }
 
           // Right Chat Stream / Message Area
           Item {
             id: rightPane
-            width: parent.width - chatListComp.width - Style.space(9)
-            height: parent.height
+            anchors.left: centerDivider.right
+            anchors.leftMargin: Style.space(8)
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
 
             // Empty state (No chat selected)
             Column {
               visible: !root.selectedChat
               anchors.centerIn: parent
-              spacing: Style.space(10)
+              spacing: Style.space(12)
 
               BorderSurface {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: Style.space(54); height: Style.space(54)
+                width: Style.space(58); height: Style.space(58)
                 radius: width / 2.0
                 color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.15)
                 borderSpec: Border.flat(Color.accent, 1)
@@ -423,16 +431,26 @@ Panel {
                   text: "\uf2c6"
                   color: Color.accent
                   font.family: root.fontFamily
-                  font.pixelSize: Style.font.title * 1.4
+                  font.pixelSize: Style.font.title * 1.5
                 }
               }
 
               Text {
                 textFormat: Text.PlainText
-                text: "Select a chat to start messaging"
+                text: "Select a conversation to start chatting"
                 color: root.dim
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
+                font.pixelSize: Style.font.body
+                font.bold: true
+                anchors.horizontalCenter: parent.horizontalCenter
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                text: "End-to-end MTProto encrypted via Telegram API"
+                color: Qt.darker(root.dim, 1.2)
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
                 anchors.horizontalCenter: parent.horizontalCenter
               }
             }
