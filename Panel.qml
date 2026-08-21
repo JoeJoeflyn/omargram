@@ -232,6 +232,13 @@ Panel {
     return e
   }
 
+  function sendReactionBackend(chatId, messageId, emoticon) {
+    if (!chatId || !messageId) return
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "reaction", String(chatId), String(messageId), emoticon || "clear"]
+    actionProc.running = true
+  }
+
   function sendReaction(chatId, messageId, emoticon) {
     if (!chatId || !messageId) return
 

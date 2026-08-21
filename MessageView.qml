@@ -207,23 +207,11 @@ Item {
     Connections {
       target: p
       function onSelectedChatChanged() {
-        msgListView.isChatSwitching = true
-        msgListView.lastVisibleIndex = 0
         msgListView.contentY = 0
         Qt.callLater(function() {
           msgListView.contentY = 0
           msgListView.positionViewAtBeginning()
-          msgListView.isChatSwitching = false
         })
-      }
-      function onActiveMessagesChanged() {
-        if (!msgListView.isChatSwitching && msgListView.lastVisibleIndex > 0) {
-          Qt.callLater(function() {
-            if (msgListView.lastVisibleIndex > 0 && msgListView.lastVisibleIndex < msgListView.count) {
-              msgListView.positionViewAtIndex(msgListView.lastVisibleIndex, ListView.Center)
-            }
-          })
-        }
       }
     }
 
@@ -233,8 +221,54 @@ Item {
       required property var modelData
       required property int index
       readonly property bool isOut: modelData.out === true
-      property bool isHovered: bubbleMouse.containsMouse || actionCapsuleMouse.containsMouse
+      property bool isHovered: bubbleMouse.containsMouse
       property bool isSnapping: false
+      property var localReactions: (modelData && modelData.reactions) ? modelData.reactions : []
+
+      onModelDataChanged: {
+        if (modelData && modelData.reactions) {
+          localReactions = modelData.reactions
+        }
+      }
+
+      function toggleReaction(emoticon) {
+        var normInput = p.normEmoji(emoticon)
+        var currentChosen = null
+        var rx = localReactions || []
+        for (var k = 0; k < rx.length; k++) {
+          if (rx[k].chosen) {
+            currentChosen = p.normEmoji(rx[k].emoticon)
+            break
+          }
+        }
+        var isRemoving = (normInput === "clear" || normInput === "remove" || currentChosen === normInput)
+        var targetEmoticon = isRemoving ? "clear" : (normInput || "👍")
+
+        var rList = []
+        for (var j = 0; j < rx.length; j++) {
+          var item = Object.assign({}, rx[j])
+          var itemNorm = p.normEmoji(item.emoticon)
+          if (item.chosen) {
+            item.count = Math.max(0, item.count - 1)
+            item.chosen = false
+          }
+          if (itemNorm === targetEmoticon && !isRemoving) {
+            item.count += 1
+            item.chosen = true
+          }
+          if (item.count > 0) {
+            item.emoticon = p.displayEmoji(item.emoticon)
+            rList.push(item)
+          }
+        }
+        if (!isRemoving && targetEmoticon && targetEmoticon !== "clear" && !rList.some(function(r) { return p.normEmoji(r.emoticon) === targetEmoticon })) {
+          rList.push({ emoticon: p.displayEmoji(emoticon), count: 1, chosen: true })
+        }
+        localReactions = rList
+
+        // Send to backend without touching the ListView model
+        p.sendReactionBackend(p.selectedChat.id, modelData.id, targetEmoticon)
+      }
 
       width: msgListView.width
       height: bubbleSurface.height + Style.space(8)
@@ -449,12 +483,12 @@ Item {
 
           // Interactive Reactions Flow (Rendered inside/below the message bubble)
           Flow {
-            visible: modelData.reactions !== undefined && modelData.reactions !== null && modelData.reactions.length > 0
+            visible: msgRow.localReactions !== undefined && msgRow.localReactions !== null && msgRow.localReactions.length > 0
             width: parent.width
             spacing: Style.space(4)
 
             Repeater {
-              model: modelData.reactions || []
+              model: msgRow.localReactions || []
               delegate: BorderSurface {
                 required property var modelData
                 required property int index
@@ -494,8 +528,7 @@ Item {
                   hoverEnabled: true
                   cursorShape: Qt.PointingHandCursor
                   onClicked: {
-                    msgListView.lastVisibleIndex = msgRow.index
-                    p.sendReaction(p.selectedChat.id, msgRow.modelData.id, modelData.emoticon)
+                    msgRow.toggleReaction(modelData.emoticon)
                   }
                 }
               }
@@ -736,11 +769,10 @@ Item {
                   hoverEnabled: true
                   cursorShape: Qt.PointingHandCursor
                   onClicked: {
-                    if (msgContextMenu.targetRow) {
-                      msgListView.lastVisibleIndex = msgContextMenu.targetRow.index
-                    }
-                    if (msgContextMenu.targetMsg) {
-                      p.sendReaction(p.selectedChat.id, msgContextMenu.targetMsg.id, modelData)
+                    if (msgContextMenu.targetRow && typeof msgContextMenu.targetRow.toggleReaction === "function") {
+                      msgContextMenu.targetRow.toggleReaction(modelData)
+                    } else if (msgContextMenu.targetMsg) {
+                      p.sendReactionBackend(p.selectedChat.id, msgContextMenu.targetMsg.id, modelData)
                     }
                     msgContextMenu.hide()
                   }
@@ -752,7 +784,7 @@ Item {
 
         // Remove Reaction (Shown when message already has a chosen reaction)
         Rectangle {
-          visible: msgContextMenu.targetMsg && msgContextMenu.targetMsg.reactions && msgContextMenu.targetMsg.reactions.some(function(r) { return r.chosen === true })
+          visible: (msgContextMenu.targetRow && msgContextMenu.targetRow.localReactions && msgContextMenu.targetRow.localReactions.some(function(r) { return r.chosen === true })) || (msgContextMenu.targetMsg && msgContextMenu.targetMsg.reactions && msgContextMenu.targetMsg.reactions.some(function(r) { return r.chosen === true }))
           width: parent.width
           height: Style.space(28)
           radius: Style.space(4)
@@ -786,11 +818,10 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
-              if (msgContextMenu.targetRow) {
-                msgListView.lastVisibleIndex = msgContextMenu.targetRow.index
-              }
-              if (msgContextMenu.targetMsg) {
-                p.sendReaction(p.selectedChat.id, msgContextMenu.targetMsg.id, "clear")
+              if (msgContextMenu.targetRow && typeof msgContextMenu.targetRow.toggleReaction === "function") {
+                msgContextMenu.targetRow.toggleReaction("clear")
+              } else if (msgContextMenu.targetMsg) {
+                p.sendReactionBackend(p.selectedChat.id, msgContextMenu.targetMsg.id, "clear")
               }
               msgContextMenu.hide()
             }
