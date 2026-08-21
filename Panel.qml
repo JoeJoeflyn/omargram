@@ -55,6 +55,8 @@ Panel {
   property bool filePickerOpen: false
   property string filePickerTab: "pictures"
   property var pickerFiles: []
+  property var currentDirEntries: []
+  property bool searchRecursive: false
   property string pickerCurrentPath: ""
   property string pickerParentPath: ""
   property string pickerSearchQuery: ""
@@ -545,6 +547,7 @@ Panel {
   function openFilePicker(tab) {
     filePickerTab = tab || "pictures"
     pickerSearchQuery = ""
+    searchRecursive = false
     filePickerOpen = true
     loadPickerFiles(filePickerTab)
   }
@@ -560,17 +563,43 @@ Panel {
   function searchPickerFiles(query) {
     pickerSearchQuery = query
     if (!query || query.trim() === "") {
-      loadPickerFiles(filePickerTab)
+      root.pickerFiles = root.currentDirEntries
       return
     }
+    var q = query.trim().toLowerCase()
+    
+    // 1. Instant fff-style in-memory filter (0ms latency, zero lag, zero process spawns)
+    var localMatches = []
+    if (root.currentDirEntries && root.currentDirEntries.length > 0) {
+      for (var i = 0; i < root.currentDirEntries.length; i++) {
+        var e = root.currentDirEntries[i]
+        if (e && e.name && e.name.toLowerCase().indexOf(q) !== -1) {
+          localMatches.push(e)
+        }
+      }
+    }
+    root.pickerFiles = localMatches
+
+    // 2. If recursive search mode is enabled, run background fd search across subfolders
+    if (root.searchRecursive) {
+      searchFilesProc.running = false
+      searchFilesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "search", query.trim(), filePickerTab]
+      searchFilesProc.running = true
+    }
+  }
+
+  function runDeepSearch() {
+    if (!pickerSearchQuery || pickerSearchQuery.trim() === "") return
+    searchRecursive = true
     searchFilesProc.running = false
-    searchFilesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "search", query.trim(), filePickerTab]
+    searchFilesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "search", pickerSearchQuery.trim(), filePickerTab]
     searchFilesProc.running = true
   }
 
   function closeFilePicker() {
     filePickerOpen = false
     pickerSearchQuery = ""
+    searchRecursive = false
   }
 
   function openNativeFilePicker() {
@@ -831,6 +860,7 @@ Panel {
         try {
           var d = JSON.parse(text || "{}")
           if (d.success && d.entries) {
+            root.currentDirEntries = d.entries
             root.pickerFiles = d.entries
             root.pickerCurrentPath = d.current_path || ""
             root.pickerParentPath = d.parent_path || ""
@@ -1315,9 +1345,16 @@ Panel {
                   searchDebounceTimer.restart()
                 }
 
+                Keys.onReturnPressed: {
+                  root.runDeepSearch()
+                }
+                Keys.onEscapePressed: {
+                  root.closeFilePicker()
+                }
+
                 Timer {
                   id: searchDebounceTimer
-                  interval: 180
+                  interval: 60
                   repeat: false
                   onTriggered: root.searchPickerFiles(pickerSearchInput.text)
                 }
