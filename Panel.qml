@@ -266,39 +266,37 @@ Panel {
     actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "reaction", String(chatId), String(messageId), targetEmoticon]
     actionProc.running = true
 
-    // Optimistically update message reaction in activeMessages and cache
-    var updated = []
-    for (var i = 0; i < activeMessages.length; i++) {
-      var m = Object.assign({}, activeMessages[i])
-      if (m.id === messageId) {
-        var rList = []
-        var rawList = m.reactions || []
-        for (var j = 0; j < rawList.length; j++) {
-          var item = Object.assign({}, rawList[j])
-          var itemNorm = normEmoji(item.emoticon)
-          if (item.chosen) {
-            item.count = Math.max(0, item.count - 1)
-            item.chosen = false
-          }
-          if (itemNorm === targetEmoticon && !isRemoving) {
-            item.count += 1
-            item.chosen = true
-          }
-          if (item.count > 0) {
-            item.emoticon = displayEmoji(item.emoticon)
-            rList.push(item)
-          }
-        }
-        // If adding a new emoji not currently in the reaction list
-        if (!isRemoving && targetEmoticon && targetEmoticon !== "clear" && !rList.some(function(r) { return normEmoji(r.emoticon) === targetEmoticon })) {
-          rList.push({ emoticon: displayEmoji(emoticon), count: 1, chosen: true })
-        }
-        m.reactions = rList
-      }
-      updated.push(m)
-    }
-    activeMessages = updated
+    // Optimistically update message reaction in cache ONLY (do not reassign activeMessages to avoid ListView scroll resets)
     if (messagesCache[chatId]) {
+      var updated = []
+      for (var i = 0; i < messagesCache[chatId].length; i++) {
+        var m = Object.assign({}, messagesCache[chatId][i])
+        if (m.id === messageId) {
+          var rList = []
+          var rawList = m.reactions || []
+          for (var j = 0; j < rawList.length; j++) {
+            var item = Object.assign({}, rawList[j])
+            var itemNorm = normEmoji(item.emoticon)
+            if (item.chosen) {
+              item.count = Math.max(0, item.count - 1)
+              item.chosen = false
+            }
+            if (itemNorm === targetEmoticon && !isRemoving) {
+              item.count += 1
+              item.chosen = true
+            }
+            if (item.count > 0) {
+              item.emoticon = displayEmoji(item.emoticon)
+              rList.push(item)
+            }
+          }
+          if (!isRemoving && targetEmoticon && targetEmoticon !== "clear" && !rList.some(function(r) { return normEmoji(r.emoticon) === targetEmoticon })) {
+            rList.push({ emoticon: displayEmoji(emoticon), count: 1, chosen: true })
+          }
+          m.reactions = rList
+        }
+        updated.push(m)
+      }
       messagesCache[chatId] = updated
     }
   }
@@ -456,10 +454,12 @@ Panel {
           if (d.success && d.messages && d.chat_id) {
             root.messagesCache[d.chat_id] = d.messages
             if (root.selectedChat && String(root.selectedChat.id) === String(d.chat_id)) {
-              var digest = JSON.stringify(d.messages)
-              if (root._lastMsgDigest !== digest) {
-                root._lastMsgDigest = digest
-                root.activeMessages = d.messages
+              var curr = root.activeMessages || []
+              var incoming = d.messages || []
+              var isChanged = (curr.length === 0) || (curr.length !== incoming.length) || (incoming.length > 0 && curr.length > 0 && incoming[0].id !== curr[0].id)
+              if (isChanged) {
+                root._lastMsgDigest = JSON.stringify(incoming)
+                root.activeMessages = incoming
               }
             }
           }
