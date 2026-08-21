@@ -146,7 +146,6 @@ Panel {
     if (!text || !selectedChat) return
     var cid = selectedChat.id
     
-    // Optimistically add message to UI immediately for 0ms feedback
     var now = new Date()
     var hours = now.getHours()
     var mins = now.getMinutes()
@@ -170,7 +169,6 @@ Panel {
     currentMsgs.push(optMsg)
     activeMessages = currentMsgs
 
-    // Send via daemon
     sendProc.running = false
     sendProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send", String(cid), text]
     sendProc.running = true
@@ -182,7 +180,6 @@ Panel {
     actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "mark_read", String(chatId)]
     actionProc.running = true
 
-    // Optimistically zero unread badge
     var updated = []
     for (var i = 0; i < allChats.length; i++) {
       var c = Object.assign({}, allChats[i])
@@ -340,29 +337,33 @@ Panel {
     }
   }
 
-  // ---- Presentation
-  panelWidth: Style.space(640)
-  panelHeight: Style.space(480)
-
-  // Floating Popout Container
-  PopupWindow {
-    id: popoutWindow
+  // ---- Popup Window
+  KeyboardPanel {
+    id: panel
     anchorItem: root.anchorItem
-    visible: root.opened
-    width: root.panelWidth
-    height: root.panelHeight
+    owner: root.barIdentity
+    bar: root.bar
+    open: root.opened
+    centerOnBar: false
+    contentWidth: panel.fittedContentWidth(Style.space(640))
+    contentHeight: panel.fittedContentHeight(Style.space(480), Style.space(600))
 
-    onVisibleChanged: {
-      if (visible) {
+    onOpenChanged: {
+      if (open) {
         root.refresh()
         if (!root.isAuthorized) root.startQrLogin()
       }
     }
 
-    Item {
-      id: contentCard
+    PanelKeyCatcher {
+      id: keyCatcher
       anchors.fill: parent
-      anchors.margins: Style.space(8)
+
+      onCloseRequested: {
+        if (root.selectedChat) root.closeActiveChat()
+        else root.close()
+      }
+      onTabRequested: function(direction) { root.switchPanel(direction) }
 
       BorderSurface {
         anchors.fill: parent

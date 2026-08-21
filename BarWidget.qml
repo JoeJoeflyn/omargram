@@ -2,7 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// Bar widget: Telegram paper airplane icon + live unread badge
+// Bar widget: Telegram paper airplane icon that opens the OmarGram panel.
 BarWidget {
   id: root
   moduleName: "omargram"
@@ -67,61 +67,43 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     slotSize: Style.bar.iconSlot
-    active: panelLoader.item && (panelLoader.item.opened || panelLoader.item.unreadCount > 0)
-    tooltipText: {
-      if (!panelLoader.item) return "OmarGram"
-      var u = panelLoader.item.unreadCount || 0
-      if (u > 0) return "OmarGram: " + u + " unread message" + (u > 1 ? "s" : "")
-      if (panelLoader.item.isAuthorized) return "OmarGram (" + (panelLoader.item.userName || "Connected") + ")"
-      return "OmarGram (Login Required)"
-    }
+    tooltipText: (panelLoader.item && panelLoader.item.unreadCount > 0)
+      ? "OmarGram (" + panelLoader.item.unreadCount + " unread)"
+      : "OmarGram"
 
     iconComponent: Component {
       Item {
         anchors.fill: parent
 
-        // Telegram Paper Airplane Icon
         Text {
           anchors.centerIn: parent
           text: "\uf2c6"
           font.family: root.bar ? root.bar.fontFamily : Style.font.family
-          font.pixelSize: Style.font.icon
-          color: {
-            if (!button.enabled) return Color.button.disabledForeground
-            if (panelLoader.item && panelLoader.item.unreadCount > 0) return Color.accent
-            if (button.active) return Color.accent
-            if (button.hovered) return Color.button.hoverForeground
-            return Color.button.foreground
-          }
+          font.pixelSize: Style.bar.iconFont
+          color: (panelLoader.item && panelLoader.item.opened)
+            ? (root.bar && root.bar.activeColor ? root.bar.activeColor : Color.accent)
+            : (root.bar ? root.bar.foreground : Color.foreground)
         }
 
-        // Live Unread Badge
-        BorderSurface {
+        Rectangle {
           visible: panelLoader.item && panelLoader.item.unreadCount > 0
-          anchors.top: parent.top
-          anchors.topMargin: -Style.space(2)
-          anchors.right: parent.right
-          anchors.rightMargin: -Style.space(4)
-          implicitWidth: Math.max(Style.space(14), badgeText.implicitWidth + Style.space(6))
-          implicitHeight: Style.space(14)
-          radius: Style.space(7)
+          width: Style.space(5)
+          height: Style.space(5)
+          radius: width / 2
           color: Color.accent
-          borderSpec: Border.none
-
-          Text {
-            id: badgeText
-            anchors.centerIn: parent
-            textFormat: Text.PlainText
-            text: (panelLoader.item && panelLoader.item.unreadCount > 99) ? "99+" : (panelLoader.item ? String(panelLoader.item.unreadCount) : "0")
-            color: "#ffffff"
-            font.family: root.bar ? root.bar.fontFamily : Style.font.family
-            font.pixelSize: Style.space(8)
-            font.bold: true
-          }
+          anchors.top: parent.top
+          anchors.topMargin: Style.space(1)
+          anchors.right: parent.right
+          anchors.rightMargin: Style.space(1)
         }
       }
     }
 
-    onClicked: root.togglePanel()
+    onPressed: function(b) {
+      if (!root.bar) return
+      if (b === Qt.RightButton) root.refresh()
+      else if (b === Qt.MiddleButton) root.refresh()
+      else root.togglePanel()
+    }
   }
 }
