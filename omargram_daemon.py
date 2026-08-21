@@ -443,6 +443,21 @@ class OmarGramDaemon:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    async def send_file_to_chat(self, chat_id, file_path, caption="", reply_to=None):
+        if not await self.client.is_user_authorized():
+            return {"success": False, "error": "Not authorized"}
+        try:
+            cid = int(chat_id)
+            entity = await self.client.get_entity(cid)
+            if not os.path.exists(file_path):
+                return {"success": False, "error": f"File not found: {file_path}"}
+            rep_id = int(reply_to) if (reply_to and str(reply_to).isdigit()) else None
+            sent = await self.client.send_file(entity, file_path, caption=caption or None, reply_to=rep_id)
+            asyncio.create_task(self.refresh_dialogs_cache())
+            return {"success": True, "message_id": sent.id}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     async def mark_chat_read(self, chat_id):
         if not await self.client.is_user_authorized():
             return {"success": False, "error": "Not authorized"}
@@ -693,6 +708,13 @@ class OmarGramDaemon:
             chat_id = cmd_dict.get("chat_id")
             text = cmd_dict.get("text", "")
             return await self.send_message_to_chat(chat_id, text)
+
+        elif action in ("send_file", "send_media"):
+            chat_id = cmd_dict.get("chat_id")
+            file_path = cmd_dict.get("file_path", "")
+            caption = cmd_dict.get("caption", "") or cmd_dict.get("text", "")
+            reply_to = cmd_dict.get("reply_to")
+            return await self.send_file_to_chat(chat_id, file_path, caption, reply_to)
 
         elif action == "mark_read":
             chat_id = cmd_dict.get("chat_id")

@@ -136,6 +136,79 @@ def send_daemon_cmd(cmd_dict, timeout=8.0):
         return {"success": False, "error": str(e)}
     return {"success": False, "error": "Empty response"}
 
+def extract_clipboard_image():
+    cache_dir = os.path.expanduser("~/.cache/omargram/attachments")
+    os.makedirs(cache_dir, mode=0o700, exist_ok=True)
+    try:
+        os.chmod(cache_dir, 0o700)
+    except Exception:
+        pass
+
+    try:
+        types_out = subprocess.check_output(["wl-paste", "--list-types"], stderr=subprocess.DEVNULL, timeout=1.0).decode("utf-8")
+    except Exception:
+        types_out = ""
+
+    target_type = None
+    ext = "png"
+    if "image/png" in types_out:
+        target_type = "image/png"
+        ext = "png"
+    elif "image/jpeg" in types_out:
+        target_type = "image/jpeg"
+        ext = "jpg"
+    elif "image/webp" in types_out:
+        target_type = "image/webp"
+        ext = "webp"
+
+    if not target_type:
+        return {"success": True, "has_image": False}
+
+    filename = f"paste_{int(time.time() * 1000)}.{ext}"
+    filepath = os.path.join(cache_dir, filename)
+
+    try:
+        with open(filepath, "wb") as f:
+            proc = subprocess.run(["wl-paste", "--type", target_type], stdout=f, stderr=subprocess.PIPE, timeout=2.5)
+        if proc.returncode == 0 and os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+            try:
+                os.chmod(filepath, 0o600)
+            except Exception:
+                pass
+            return {
+                "success": True,
+                "has_image": True,
+                "file_path": filepath,
+                "file_name": filename,
+                "file_size": os.path.getsize(filepath),
+                "mime": target_type
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    return {"success": True, "has_image": False}
+
+def pick_file_dialog():
+    try:
+        res = subprocess.check_output(
+            ["zenity", "--file-selection", "--title=Select media or file to attach in OmarGram"],
+            stderr=subprocess.DEVNULL,
+            timeout=60.0
+        ).decode("utf-8").strip()
+        if res and os.path.exists(res):
+            return {
+                "success": True,
+                "file_path": res,
+                "file_name": os.path.basename(res),
+                "file_size": os.path.getsize(res)
+            }
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Dialog timed out"}
+    except subprocess.CalledProcessError:
+        return {"success": True, "cancelled": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    return {"success": True, "cancelled": True}
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps(send_daemon_cmd({"action": "status"})))
@@ -145,6 +218,10 @@ def main():
 
     if action == "status":
         print(json.dumps(send_daemon_cmd({"action": "status"})))
+    elif action == "paste_image":
+        print(json.dumps(extract_clipboard_image()))
+    elif action == "pick_file":
+        print(json.dumps(pick_file_dialog()))
     elif action in ("dialogs", "chats"):
         limit = int(sys.argv[2]) if len(sys.argv) > 2 else 40
         print(json.dumps(send_daemon_cmd({"action": "dialogs", "limit": limit})))
@@ -162,6 +239,21 @@ def main():
         chat_id = sys.argv[2]
         text = " ".join(sys.argv[3:])
         print(json.dumps(send_daemon_cmd({"action": "send", "chat_id": chat_id, "text": text})))
+    elif action in ("send_file", "send_media"):
+        if len(sys.argv) < 4:
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py send_file <chat_id> <file_path> [caption] [reply_to]"}))
+            sys.exit(1)
+        chat_id = sys.argv[2]
+        file_path = sys.argv[3]
+        caption = sys.argv[4] if len(sys.argv) > 4 else ""
+        reply_to = sys.argv[5] if len(sys.argv) > 5 else None
+        print(json.dumps(send_daemon_cmd({
+            "action": "send_file",
+            "chat_id": chat_id,
+            "file_path": file_path,
+            "caption": caption,
+            "reply_to": reply_to
+        })))
     elif action == "mark_read":
         if len(sys.argv) < 3:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py mark_read <chat_id>"}))

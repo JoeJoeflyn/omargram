@@ -51,6 +51,7 @@ Panel {
   property var selectedMsgIds: []
   property bool forwardModalOpen: false
   property var forwardMsgIds: []
+  property var attachedFile: null
 
   property string qrPath: ""
   property double qrTimestamp: 0
@@ -506,7 +507,83 @@ Panel {
     messagesCache[cid] = currentMsgs
 
     sendProc.running = false
+    var repId = replyingTo ? String(replyingTo.id) : ""
     sendProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send", String(cid), text]
+    sendProc.running = true
+    clearReply()
+  }
+
+  function attachFile(path) {
+    if (!path) return
+    var parts = path.split("/")
+    var fname = parts[parts.length - 1]
+    var isImg = /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(fname)
+    attachedFile = {
+      path: path,
+      name: fname,
+      preview: "file://" + path,
+      isImage: isImg
+    }
+  }
+
+  function clearAttachedFile() {
+    attachedFile = null
+  }
+
+  function checkAndPasteClipboardImage() {
+    pasteImageProc.running = false
+    pasteImageProc.running = true
+  }
+
+  function openFilePicker() {
+    pickFileProc.running = false
+    pickFileProc.running = true
+  }
+
+  function sendFileToActiveChat(filePath, caption) {
+    if (!filePath || !selectedChat) return
+    var cid = selectedChat.id
+    
+    var now = new Date()
+    var hours = now.getHours()
+    var mins = now.getMinutes()
+    var timeStr = (hours < 10 ? "0" + hours : hours) + ":" + (mins < 10 ? "0" + mins : mins)
+    
+    var parts = filePath.split("/")
+    var fname = parts[parts.length - 1]
+    var isImg = /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(fname)
+    
+    var optMsg = {
+      id: Date.now(),
+      chat_id: cid,
+      sender_name: userName || "You",
+      sender_avatar: userAvatar,
+      sender_initials: userInitials,
+      sender_color: Color.accent,
+      text: caption || "",
+      time: timeStr,
+      date: "Today",
+      out: true,
+      status: "sent",
+      is_read: false,
+      media_type: isImg ? "photo" : "document",
+      media_path: isImg ? filePath : ""
+    }
+    
+    var currentMsgs = [optMsg].concat(activeMessages)
+    activeMessages = currentMsgs
+    messagesCache[cid] = currentMsgs
+    clearAttachedFile()
+
+    sendProc.running = false
+    var repId = replyingTo ? String(replyingTo.id) : ""
+    var cmd = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send_file", String(cid), filePath]
+    if (caption) cmd.push(caption)
+    else if (repId) cmd.push("")
+    if (repId) cmd.push(repId)
+    clearReply()
+
+    sendProc.command = cmd
     sendProc.running = true
   }
 
@@ -667,6 +744,38 @@ Panel {
 
   Process {
     id: actionProc
+  }
+
+  Process {
+    id: pasteImageProc
+    command: ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "paste_image"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(text || "{}")
+          if (d.success && d.has_image && d.file_path) {
+            root.attachFile(d.file_path)
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+  Process {
+    id: pickFileProc
+    command: ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "pick_file"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(text || "{}")
+          if (d.success && d.file_path && !d.cancelled) {
+            root.attachFile(d.file_path)
+          }
+        } catch (e) {}
+      }
+    }
   }
 
   // Background Poll Timer
