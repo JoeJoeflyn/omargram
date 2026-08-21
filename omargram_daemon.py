@@ -292,7 +292,7 @@ class OmarGramDaemon:
                 self.cached_senders = {}
 
             result = []
-            for m in reversed(messages):
+            for m in messages:
                 sender_name = "You" if m.out else chat_title
                 sender_avatar = chat_avatar if not m.out else ""
                 sender_color = get_avatar_color(sender_name)
@@ -364,10 +364,14 @@ class OmarGramDaemon:
                     "webpage": webpage_meta,
                     "reply_to_msg_id": m.reply_to_msg_id if hasattr(m, "reply_to_msg_id") else None
                 })
+            
+            if not hasattr(self, 'chat_messages_cache'):
+                self.chat_messages_cache = {}
+            self.chat_messages_cache[cid] = result
             return result
         except Exception as e:
             print(f"Error fetching messages for {chat_id}: {e}", file=sys.stderr)
-            return []
+            return getattr(self, 'chat_messages_cache', {}).get(int(chat_id) if str(chat_id).isdigit() else 0, [])
 
     async def send_message_to_chat(self, chat_id, text):
         if not await self.client.is_user_authorized():

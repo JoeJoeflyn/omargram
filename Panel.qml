@@ -117,10 +117,17 @@ Panel {
     if (selectedChat) loadMessages(selectedChat.id)
   }
 
+  property var messagesCache: ({})
+
   function selectChat(chat) {
     if (!chat) return
     root._lastMsgDigest = ""
     selectedChat = chat
+    if (messagesCache[chat.id]) {
+      activeMessages = messagesCache[chat.id]
+    } else {
+      activeMessages = []
+    }
     loadMessages(chat.id)
     markChatRead(chat.id)
   }
@@ -157,8 +164,11 @@ Panel {
     actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "delete_message", String(chatId), String(messageId)]
     actionProc.running = true
 
-    // Optimistically remove message from list
+    // Optimistically remove message from list and cache
     activeMessages = activeMessages.filter(function(m) { return m.id !== messageId })
+    if (messagesCache[chatId]) {
+      messagesCache[chatId] = messagesCache[chatId].filter(function(m) { return m.id !== messageId })
+    }
   }
 
   function loadMessages(chatId) {
@@ -189,13 +199,15 @@ Panel {
       time: timeStr,
       date: "Today",
       out: true,
+      status: "sent",
+      is_read: false,
       media_type: "",
       media_path: ""
     }
     
-    var currentMsgs = [].concat(activeMessages)
-    currentMsgs.push(optMsg)
+    var currentMsgs = [optMsg].concat(activeMessages)
     activeMessages = currentMsgs
+    messagesCache[cid] = currentMsgs
 
     sendProc.running = false
     sendProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send", String(cid), text]
@@ -309,11 +321,14 @@ Panel {
         root.loadingMessages = false
         try {
           var d = JSON.parse(text || "{}")
-          if (d.success && d.messages) {
-            var digest = JSON.stringify(d.messages)
-            if (root._lastMsgDigest !== digest) {
-              root._lastMsgDigest = digest
-              root.activeMessages = d.messages
+          if (d.success && d.messages && d.chat_id) {
+            root.messagesCache[d.chat_id] = d.messages
+            if (root.selectedChat && String(root.selectedChat.id) === String(d.chat_id)) {
+              var digest = JSON.stringify(d.messages)
+              if (root._lastMsgDigest !== digest) {
+                root._lastMsgDigest = digest
+                root.activeMessages = d.messages
+              }
             }
           }
         } catch (e) {}

@@ -144,7 +144,7 @@ Item {
     anchors.bottomMargin: Style.space(4)
   }
 
-  // 3. Middle Messages Stream ListView
+  // 3. Middle Messages Stream ListView (BottomToTop = latest message at index 0 pinned to bottom)
   ListView {
     id: msgListView
     anchors.top: chatHeader.bottom
@@ -156,33 +156,10 @@ Item {
     clip: true
     spacing: Style.space(8)
     boundsBehavior: Flickable.StopAtBounds
+    verticalLayoutDirection: ListView.BottomToTop
     model: p.activeMessages
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-
-    onCountChanged: {
-      if (!msgListView.moving) {
-        Qt.callLater(function() {
-          msgListView.positionViewAtEnd()
-        })
-      }
-    }
-
-    Connections {
-      target: p
-      function onSelectedChatChanged() {
-        Qt.callLater(function() {
-          msgListView.positionViewAtEnd()
-        })
-      }
-      function onActiveMessagesChanged() {
-        if (!msgListView.moving) {
-          Qt.callLater(function() {
-            msgListView.positionViewAtEnd()
-          })
-        }
-      }
-    }
 
     // Message Row Delegate
     delegate: Item {
