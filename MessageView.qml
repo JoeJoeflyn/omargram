@@ -3,7 +3,7 @@ import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 
-// Chat message stream with avatars for both sender and user, Omarchy theme sync, and per-message delete action
+// Chat message stream with avatars for both sender and user, Omarchy theme sync, and authentic Telegram Thanos snap particle disintegration
 Item {
   id: root
   property var p  // Panel root
@@ -162,8 +162,8 @@ Item {
 
     remove: Transition {
       ParallelAnimation {
-        NumberAnimation { property: "opacity"; to: 0.0; duration: 250; easing.type: Easing.OutQuad }
-        NumberAnimation { property: "scale"; to: 0.75; duration: 250; easing.type: Easing.OutBack }
+        NumberAnimation { property: "opacity"; to: 0.0; duration: 200; easing.type: Easing.OutQuad }
+        NumberAnimation { property: "scale"; to: 0.8; duration: 200; easing.type: Easing.OutQuad }
       }
     }
 
@@ -189,6 +189,13 @@ Item {
 
       width: msgListView.width
       height: bubbleContentCol.implicitHeight + Style.space(16)
+
+      function snapAndRemove() {
+        var mapped = bubbleSurface.mapToItem(thanosOverlay, 0, 0)
+        var col = msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.75)
+        thanosOverlay.disintegrate(mapped.x, mapped.y, bubbleSurface.width, bubbleSurface.height, col)
+        p.deleteMessage(p.selectedChat.id, modelData.id)
+      }
 
       MouseArea {
         id: msgMouseArea
@@ -334,7 +341,7 @@ Item {
             anchors.right: parent.right
             spacing: Style.space(5)
 
-            // Delete Message button on hover
+            // Delete Message button on hover (Triggers Thanos Snap Particle Disintegration)
             Text {
               visible: msgMouseArea.containsMouse
               text: "\uf2ed"
@@ -346,9 +353,7 @@ Item {
                 id: delMsgMouse
                 anchors.fill: parent; anchors.margins: -4
                 hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                  p.deleteMessage(p.selectedChat.id, modelData.id)
-                }
+                onClicked: msgRow.snapAndRemove()
               }
             }
 
@@ -370,6 +375,93 @@ Item {
           }
         }
       }
+    }
+  }
+
+  // 4. Global Thanos Snap Particle Overlay (Vaporizes messages into dust particles)
+  Item {
+    id: thanosOverlay
+    anchors.fill: msgListView
+    z: 99
+    clip: true
+    property var particles: []
+    property bool running: false
+
+    Canvas {
+      id: particleCanvas
+      anchors.fill: parent
+      visible: thanosOverlay.running
+
+      onPaint: {
+        var ctx = getContext("2d")
+        ctx.clearRect(0, 0, width, height)
+        var pts = thanosOverlay.particles
+        for (var i = 0; i < pts.length; i++) {
+          var pt = pts[i]
+          if (pt.alpha > 0.01) {
+            ctx.fillStyle = Qt.rgba(pt.r, pt.g, pt.b, pt.alpha)
+            ctx.fillRect(pt.x, pt.y, pt.size, pt.size)
+          }
+        }
+      }
+    }
+
+    Timer {
+      id: particleTimer
+      interval: 16
+      repeat: true
+      running: thanosOverlay.running
+      onTriggered: {
+        var pts = thanosOverlay.particles
+        var aliveCount = 0
+        for (var i = 0; i < pts.length; i++) {
+          var pt = pts[i]
+          if (pt.alpha > 0.01) {
+            pt.x += pt.vx
+            pt.y += pt.vy
+            pt.vx += 0.06 // wind force to right
+            pt.vy -= 0.03 // ash lift
+            pt.alpha -= pt.decay
+            if (pt.alpha > 0.01) aliveCount++
+          }
+        }
+        if (aliveCount === 0) {
+          thanosOverlay.running = false
+          thanosOverlay.particles = []
+        } else {
+          particleCanvas.requestPaint()
+        }
+      }
+    }
+
+    function disintegrate(startX, startY, w, h, baseColor) {
+      var col = Color.accent
+      if (baseColor) col = baseColor
+      var r = col.r, g = col.g, b = col.b
+
+      var newPts = []
+      var count = Math.min(180, Math.max(80, Math.floor((w * h) / 100)))
+      for (var i = 0; i < count; i++) {
+        var px = startX + Math.random() * w
+        var py = startY + Math.random() * h
+        var progress = (px - startX) / (w || 1)
+        var vx = 0.6 + Math.random() * 3.5 + progress * 2.2
+        var vy = -(Math.random() * 3.8 + 1.0)
+        var size = Math.random() < 0.25 ? 3 : (Math.random() < 0.65 ? 2 : 1.2)
+        var decay = 0.016 + Math.random() * 0.024
+
+        newPts.push({
+          x: px, y: py,
+          vx: vx, vy: vy,
+          size: size,
+          alpha: 1.0,
+          decay: decay,
+          r: r, g: g, b: b
+        })
+      }
+
+      particles = particles.concat(newPts)
+      running = true
     }
   }
 }
