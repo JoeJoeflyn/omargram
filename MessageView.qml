@@ -353,19 +353,12 @@ Item {
 
           // Webpage / Social Media Link Preview Card
           BorderSurface {
-            visible: modelData.webpage !== null && modelData.webpage !== undefined && (modelData.webpage.title !== "" || modelData.webpage.description !== "" || modelData.webpage.photo !== "")
+            visible: modelData.webpage !== null && modelData.webpage !== undefined && (modelData.webpage.title !== "" || modelData.webpage.description !== "" || (modelData.webpage.photo !== "" && modelData.webpage.photo !== undefined))
             width: parent.width
-            height: {
-              if (!modelData.webpage) return 0
-              var h = Style.space(34)
-              if (modelData.webpage.description) h += Style.space(26)
-              if (modelData.webpage.photo) h += Style.space(80)
-              return h
-            }
+            implicitHeight: metaCol.implicitHeight + Style.space(14)
             radius: Style.space(8)
-            color: msgRow.isOut ? Qt.rgba(0, 0, 0, 0.16) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.05)
-            borderSpec: Border.leftSpec(Color.accent, 2)
-            clip: true
+            color: msgRow.isOut ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.06)
+            borderSpec: Border.leftSpec(msgRow.isOut ? "#ffffff" : Color.accent, 3)
 
             MouseArea {
               anchors.fill: parent
@@ -379,19 +372,22 @@ Item {
             }
 
             Column {
-              anchors.fill: parent
-              anchors.margins: Style.space(6)
-              spacing: Style.space(3)
+              id: metaCol
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.top: parent.top
+              anchors.margins: Style.space(8)
+              spacing: Style.space(4)
 
-              // Site name (e.g. YouTube, Twitter / X, GitHub, Instagram)
+              // Site name badge (e.g. YouTube, Twitter / X, GitHub, Instagram)
               Text {
                 visible: modelData.webpage && modelData.webpage.site_name !== ""
                 width: parent.width
                 textFormat: Text.PlainText
                 text: (modelData.webpage && modelData.webpage.site_name) ? modelData.webpage.site_name : ""
-                color: Color.accent
+                color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.95) : Color.accent
                 font.family: p.fontFamily
-                font.pixelSize: Style.font.caption * 0.8
+                font.pixelSize: Style.font.caption * 0.85
                 font.bold: true
                 elide: Text.ElideRight
               }
@@ -401,12 +397,13 @@ Item {
                 visible: modelData.webpage && modelData.webpage.title !== ""
                 width: parent.width
                 textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
                 text: (modelData.webpage && modelData.webpage.title) ? modelData.webpage.title : ""
                 color: msgRow.isOut ? "#ffffff" : p.foreground
                 font.family: p.fontFamily
                 font.pixelSize: Style.font.bodySmall
                 font.bold: true
-                maximumLineCount: 1
                 elide: Text.ElideRight
               }
 
@@ -415,11 +412,12 @@ Item {
                 visible: modelData.webpage && modelData.webpage.description !== ""
                 width: parent.width
                 textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                maximumLineCount: 3
                 text: (modelData.webpage && modelData.webpage.description) ? modelData.webpage.description : ""
-                color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.8) : p.dim
+                color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.9) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.85)
                 font.family: p.fontFamily
-                font.pixelSize: Style.font.caption * 0.85
-                maximumLineCount: (modelData.webpage && modelData.webpage.photo) ? 1 : 2
+                font.pixelSize: Style.font.caption * 0.9
                 elide: Text.ElideRight
               }
 
@@ -427,10 +425,10 @@ Item {
               Image {
                 visible: modelData.webpage && modelData.webpage.photo !== "" && modelData.webpage.photo !== undefined
                 width: parent.width
-                height: Style.space(75)
+                height: Math.min(Style.space(130), width * 0.52)
                 source: (modelData.webpage && modelData.webpage.photo) ? "file://" + modelData.webpage.photo : ""
                 fillMode: Image.PreserveAspectCrop
-                sourceSize.width: 400; sourceSize.height: 200
+                sourceSize.width: 500; sourceSize.height: 300
               }
             }
           }
