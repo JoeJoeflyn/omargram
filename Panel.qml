@@ -119,6 +119,7 @@ Panel {
 
   function selectChat(chat) {
     if (!chat) return
+    root._lastMsgDigest = ""
     selectedChat = chat
     loadMessages(chat.id)
     markChatRead(chat.id)

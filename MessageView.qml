@@ -160,17 +160,23 @@ Item {
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-    property var lastChatId: null
+    onCountChanged: {
+      if (!msgListView.moving) {
+        Qt.callLater(function() {
+          msgListView.positionViewAtEnd()
+        })
+      }
+    }
 
     Connections {
       target: p
+      function onSelectedChatChanged() {
+        Qt.callLater(function() {
+          msgListView.positionViewAtEnd()
+        })
+      }
       function onActiveMessagesChanged() {
-        if (msgListView.lastChatId !== (p.selectedChat ? p.selectedChat.id : null)) {
-          msgListView.lastChatId = (p.selectedChat ? p.selectedChat.id : null)
-          Qt.callLater(function() {
-            msgListView.positionViewAtEnd()
-          })
-        } else if (msgListView.atYEnd || p.activeMessages.length <= 1) {
+        if (!msgListView.moving) {
           Qt.callLater(function() {
             msgListView.positionViewAtEnd()
           })
