@@ -186,6 +186,7 @@ Item {
       required property var modelData
       required property int index
       readonly property bool isOut: modelData.out === true
+      property bool isHovered: bubbleMouse.containsMouse || delBtnMouse.containsMouse
 
       width: msgListView.width
       height: bubbleContentCol.implicitHeight + Style.space(16)
@@ -195,12 +196,6 @@ Item {
         var col = msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.75)
         thanosOverlay.disintegrate(mapped.x, mapped.y, bubbleSurface.width, bubbleSurface.height, col)
         p.deleteMessage(p.selectedChat.id, modelData.id)
-      }
-
-      MouseArea {
-        id: msgMouseArea
-        anchors.fill: parent
-        hoverEnabled: true
       }
 
       // 1. Incoming Sender Avatar (Positioned left of the bubble)
@@ -287,11 +282,18 @@ Item {
         anchors.right: msgRow.isOut ? rightAvatar.left : undefined
         anchors.rightMargin: msgRow.isOut ? Style.space(6) : 0
         anchors.top: parent.top
-        width: Math.min(msgListView.width * 0.68, Math.max(Style.space(100), bubbleContentCol.implicitWidth + Style.space(24)))
+        width: Math.min(msgListView.width * 0.68, Math.max(Style.space(110), bubbleContentCol.implicitWidth + Style.space(24)))
         height: bubbleContentCol.implicitHeight + Style.space(16)
         radius: Style.space(14)
         color: msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)
         borderSpec: msgRow.isOut ? Border.none : Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.1), 1)
+
+        MouseArea {
+          id: bubbleMouse
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.ArrowCursor
+        }
 
         Column {
           id: bubbleContentCol
@@ -339,21 +341,31 @@ Item {
           // Timestamp and status row
           Row {
             anchors.right: parent.right
-            spacing: Style.space(5)
+            spacing: Style.space(6)
 
-            // Delete Message button on hover (Triggers Thanos Snap Particle Disintegration)
-            Text {
-              visible: msgMouseArea.containsMouse
-              text: "\uf2ed"
-              color: delMsgMouse.containsMouse ? p.urgent : (msgRow.isOut ? Qt.rgba(1, 1, 1, 0.75) : p.dim)
-              font.family: p.fontFamily
-              font.pixelSize: Style.space(9)
+            // Delete Message Button (Comfortable, instant, zero flicker)
+            Item {
+              width: Style.space(16)
+              height: Style.space(14)
+              visible: msgRow.isHovered
+
+              Text {
+                anchors.centerIn: parent
+                text: "\uf2ed"
+                color: delBtnMouse.containsMouse ? p.urgent : (msgRow.isOut ? Qt.rgba(1, 1, 1, 0.85) : p.dim)
+                font.family: p.fontFamily
+                font.pixelSize: Style.space(10)
+              }
 
               MouseArea {
-                id: delMsgMouse
-                anchors.fill: parent; anchors.margins: -4
-                hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                onClicked: msgRow.snapAndRemove()
+                id: delBtnMouse
+                anchors.fill: parent
+                anchors.margins: -4
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  msgRow.snapAndRemove()
+                }
               }
             }
 
@@ -363,6 +375,7 @@ Item {
               color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.75) : p.dim
               font.family: p.fontFamily
               font.pixelSize: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
             }
 
             Text {
@@ -371,6 +384,7 @@ Item {
               color: Qt.rgba(1, 1, 1, 0.85)
               font.family: p.fontFamily
               font.pixelSize: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
             }
           }
         }
@@ -378,12 +392,13 @@ Item {
     }
   }
 
-  // 4. Global Thanos Snap Particle Overlay (Vaporizes messages into dust particles)
+  // 4. Global Thanos Snap Particle Overlay (enabled: false to NEVER intercept clicks)
   Item {
     id: thanosOverlay
     anchors.fill: msgListView
     z: 99
     clip: true
+    enabled: false
     property var particles: []
     property bool running: false
 
