@@ -783,15 +783,19 @@ Item {
                 readonly property bool isChosen: modelData.chosen === true
 
                 height: Style.space(20)
-                implicitWidth: rxRow.implicitWidth + Style.space(10)
+                implicitWidth: rxRow.implicitWidth + Style.space(12)
                 radius: Style.space(10)
-                color: isChosen ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.35) : (rxMouse.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15) : (msgRow.isOut ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)))
-                borderSpec: isChosen ? Border.flat(Color.accent, 1) : Border.none
+                color: msgRow.isOut
+                  ? (isChosen ? Qt.rgba(0, 0, 0, 0.38) : (rxMouse.containsMouse ? Qt.rgba(0, 0, 0, 0.45) : Qt.rgba(0, 0, 0, 0.25)))
+                  : (isChosen ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.22) : (rxMouse.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)))
+                borderSpec: msgRow.isOut
+                  ? (isChosen ? Border.flat(Qt.rgba(1, 1, 1, 0.95), 1.5) : Border.flat(Qt.rgba(1, 1, 1, 0.3), 1))
+                  : (isChosen ? Border.flat(Color.accent, 1.5) : Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15), 1))
 
                 Row {
                   id: rxRow
                   anchors.centerIn: parent
-                  spacing: Style.space(3)
+                  spacing: Style.space(4)
 
                   Text {
                     text: p.displayEmoji(modelData.emoticon) || "👍"
@@ -802,9 +806,9 @@ Item {
 
                   Text {
                     text: String(modelData.count || 1)
-                    color: msgRow.isOut ? "#ffffff" : p.foreground
+                    color: msgRow.isOut ? "#ffffff" : (isChosen ? Color.accent : p.foreground)
                     font.family: p.fontFamily
-                    font.pixelSize: Style.space(8.5)
+                    font.pixelSize: Style.space(9)
                     font.bold: true
                     anchors.verticalCenter: parent.verticalCenter
                   }
