@@ -188,11 +188,15 @@ def extract_clipboard_image():
     return {"success": True, "has_image": False}
 
 def pick_file_dialog():
+    env = dict(os.environ)
+    env["NO_AT_SPI_CLIENT_BUS"] = "1"
+    env["GDK_BACKEND"] = "wayland,x11"
     try:
         res = subprocess.check_output(
             ["zenity", "--file-selection", "--title=Select media or file to attach in OmarGram"],
+            env=env,
             stderr=subprocess.DEVNULL,
-            timeout=60.0
+            timeout=120.0
         ).decode("utf-8").strip()
         if res and os.path.exists(res):
             return {
