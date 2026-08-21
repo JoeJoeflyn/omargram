@@ -8,7 +8,7 @@ Item {
   id: root
   property var p  // Panel root
 
-  width: Style.space(250)
+  width: Style.space(260)
   anchors.top: parent.top
   anchors.bottom: parent.bottom
   anchors.left: parent.left
@@ -20,7 +20,7 @@ Item {
     // 1. Search Box
     BorderSurface {
       width: parent.width
-      implicitHeight: Style.space(32)
+      height: Style.space(32)
       radius: Style.cornerRadius
       color: Color.popups.background
       borderSpec: Border.controlSpec(searchInput.activeFocus ? "focused" : "normal", p.foreground, Color.accent)
@@ -96,7 +96,7 @@ Item {
         delegate: BorderSurface {
           required property var modelData
           readonly property bool isSelected: p.chatFilter === modelData.id
-          implicitHeight: Style.space(22)
+          height: Style.space(22)
           implicitWidth: chipText.implicitWidth + Style.space(12)
           radius: Style.space(11)
           color: isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : "transparent"
@@ -124,9 +124,9 @@ Item {
     ListView {
       id: chatListView
       width: parent.width
-      height: parent.height - y
+      height: parent.height - Style.space(66)
       clip: true
-      spacing: Style.space(3)
+      spacing: Style.space(2)
       boundsBehavior: Flickable.StopAtBounds
       model: p.filteredChats
 
@@ -138,9 +138,9 @@ Item {
         required property int index
         readonly property bool isSelected: p.selectedChat && p.selectedChat.id === modelData.id
         width: chatListView.width
-        implicitHeight: Style.space(52)
+        height: Style.space(56)
         radius: Style.cornerRadius
-        color: isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.18) : (rowMouse.containsMouse ? Style.hoverFillFor(p.foreground, Color.accent) : "transparent")
+        color: isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : (rowMouse.containsMouse ? Style.hoverFillFor(p.foreground, Color.accent) : "transparent")
         borderSpec: isSelected ? Border.flat(Color.accent, 1) : Border.none
 
         MouseArea {
@@ -151,16 +151,16 @@ Item {
           onClicked: p.selectChat(modelData)
         }
 
-        Row {
+        Item {
           anchors.fill: parent
-          anchors.leftMargin: Style.space(6)
-          anchors.rightMargin: Style.space(6)
-          anchors.verticalCenter: parent.verticalCenter
-          spacing: Style.space(8)
+          anchors.leftMargin: Style.space(8)
+          anchors.rightMargin: Style.space(8)
 
           // Avatar Item
           Item {
-            width: Style.space(36); height: Style.space(36)
+            id: avatarBox
+            width: Style.space(38); height: Style.space(38)
+            anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
 
             BorderSurface {
@@ -175,7 +175,7 @@ Item {
                 anchors.fill: parent
                 source: modelData.avatar ? "file://" + modelData.avatar : ""
                 fillMode: Image.PreserveAspectCrop
-                sourceSize.width: 72; sourceSize.height: 72
+                sourceSize.width: 76; sourceSize.height: 76
               }
 
               Text {
@@ -202,18 +202,36 @@ Item {
           }
 
           // Content Column
-          Column {
-            width: parent.width - Style.space(48)
+          Item {
+            anchors.left: avatarBox.right
+            anchors.leftMargin: Style.space(8)
+            anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(2)
+            height: Style.space(36)
 
             // Top row: Title + Time
-            Row {
-              width: parent.width
-              spacing: Style.space(4)
+            Item {
+              anchors.top: parent.top
+              anchors.left: parent.left
+              anchors.right: parent.right
+              height: Style.space(18)
 
               Text {
-                width: parent.width - timeText.implicitWidth - Style.space(4)
+                id: timeText
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: (modelData.last_message && modelData.last_message.time) ? modelData.last_message.time : ""
+                color: modelData.unread_count > 0 ? Color.accent : p.dim
+                font.family: p.fontFamily
+                font.pixelSize: Style.font.caption * 0.8
+              }
+
+              Text {
+                anchors.left: parent.left
+                anchors.right: timeText.left
+                anchors.rightMargin: Style.space(4)
+                anchors.verticalCenter: parent.verticalCenter
                 textFormat: Text.PlainText
                 text: modelData.title || "Chat"
                 color: (modelData.unread_count > 0 || isSelected) ? p.foreground : Qt.darker(p.foreground, 1.2)
@@ -222,44 +240,23 @@ Item {
                 font.bold: modelData.unread_count > 0 || isSelected
                 elide: Text.ElideRight
               }
-
-              Text {
-                id: timeText
-                textFormat: Text.PlainText
-                text: (modelData.last_message && modelData.last_message.time) ? modelData.last_message.time : ""
-                color: modelData.unread_count > 0 ? Color.accent : p.dim
-                font.family: p.fontFamily
-                font.pixelSize: Style.font.caption * 0.8
-              }
             }
 
             // Bottom row: Last message snippet + unread badge
-            Row {
-              width: parent.width
-              spacing: Style.space(4)
-
-              Text {
-                width: parent.width - (badgePill.visible ? badgePill.implicitWidth + Style.space(4) : 0)
-                textFormat: Text.PlainText
-                text: {
-                  if (!modelData.last_message) return ""
-                  var prefix = modelData.last_message.out ? "✓ " : ""
-                  return prefix + (modelData.last_message.text || "")
-                }
-                color: modelData.unread_count > 0 ? p.foreground : p.dim
-                font.family: p.fontFamily
-                font.pixelSize: Style.font.caption * 0.88
-                font.bold: modelData.unread_count > 0
-                elide: Text.ElideRight
-              }
+            Item {
+              anchors.bottom: parent.bottom
+              anchors.left: parent.left
+              anchors.right: parent.right
+              height: Style.space(16)
 
               BorderSurface {
                 id: badgePill
                 visible: modelData.unread_count > 0
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                implicitHeight: Style.space(16)
-                implicitWidth: Math.max(Style.space(16), unreadText.implicitWidth + Style.space(6))
-                radius: Style.space(8)
+                height: Style.space(15)
+                implicitWidth: Math.max(Style.space(15), unreadText.implicitWidth + Style.space(6))
+                radius: Style.space(7.5)
                 color: Color.accent
                 borderSpec: Border.none
 
@@ -273,6 +270,27 @@ Item {
                   font.pixelSize: Style.space(8)
                   font.bold: true
                 }
+              }
+
+              Text {
+                anchors.left: parent.left
+                anchors.right: badgePill.visible ? badgePill.left : parent.right
+                anchors.rightMargin: badgePill.visible ? Style.space(4) : 0
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                maximumLineCount: 1
+                elide: Text.ElideRight
+                text: {
+                  if (!modelData.last_message) return ""
+                  var raw = modelData.last_message.text || ""
+                  var singleLine = raw.replace(/[\r\n]+/g, " ").trim()
+                  var prefix = modelData.last_message.out ? "✓ " : ""
+                  return prefix + (singleLine || (modelData.last_message.media_type ? "📷 Media" : ""))
+                }
+                color: modelData.unread_count > 0 ? p.foreground : p.dim
+                font.family: p.fontFamily
+                font.pixelSize: Style.font.caption * 0.88
+                font.bold: modelData.unread_count > 0
               }
             }
           }

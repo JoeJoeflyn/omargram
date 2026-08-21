@@ -45,7 +45,8 @@ Panel {
   readonly property bool dialogsProcRunning: dialogsProc.running
 
   Component.onCompleted: {
-    root.refresh()
+    statusProc.running = true
+    dialogsProc.running = true
   }
 
   onSearchQueryChanged: filterChatsList()
@@ -110,7 +111,8 @@ Panel {
   // ---- Actions
   function refresh() {
     if (!statusProc.running) statusProc.running = true
-    if (root.isAuthorized && !dialogsProc.running) dialogsProc.running = true
+    if (!dialogsProc.running) dialogsProc.running = true
+    if (selectedChat) loadMessages(selectedChat.id)
   }
 
   function selectChat(chat) {

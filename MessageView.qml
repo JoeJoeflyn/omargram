@@ -142,13 +142,13 @@ Item {
   ListView {
     id: msgListView
     anchors.top: chatHeader.bottom
-    anchors.topMargin: Style.space(4)
+    anchors.topMargin: Style.space(6)
     anchors.bottom: composerComp.top
-    anchors.bottomMargin: Style.space(4)
+    anchors.bottomMargin: Style.space(6)
     anchors.left: parent.left
     anchors.right: parent.right
     clip: true
-    spacing: Style.space(10)
+    spacing: Style.space(8)
     boundsBehavior: Flickable.StopAtBounds
     model: p.activeMessages
 
@@ -170,7 +170,7 @@ Item {
       required property int index
       readonly property bool isOut: modelData.out === true
       width: msgListView.width
-      implicitHeight: Math.max(avatarContainer.height, bubbleContainer.implicitHeight)
+      height: bubbleContentCol.implicitHeight + Style.space(16)
 
       // Incoming Sender Avatar (Positioned left of the bubble)
       Item {
@@ -179,6 +179,7 @@ Item {
         anchors.left: parent.left
         anchors.leftMargin: Style.space(6)
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: Style.space(8)
         width: Style.space(28); height: Style.space(28)
 
         BorderSurface {
@@ -209,85 +210,82 @@ Item {
         }
       }
 
-      // Message Bubble Container
-      Item {
-        id: bubbleContainer
+      // Message Bubble Surface
+      BorderSurface {
+        id: bubbleSurface
         anchors.left: msgRow.isOut ? undefined : avatarContainer.right
         anchors.leftMargin: msgRow.isOut ? 0 : Style.space(6)
         anchors.right: msgRow.isOut ? parent.right : undefined
         anchors.rightMargin: msgRow.isOut ? Style.space(8) : 0
-        width: Math.min(msgListView.width * 0.74, bubbleSurface.implicitWidth)
-        implicitHeight: bubbleSurface.implicitHeight
+        anchors.top: parent.top
+        width: Math.min(msgListView.width * 0.72, Math.max(Style.space(100), bubbleContentCol.implicitWidth + Style.space(24)))
+        height: bubbleContentCol.implicitHeight + Style.space(16)
+        radius: Style.space(14)
+        color: msgRow.isOut ? Color.accent : Qt.rgba(1, 1, 1, 0.08)
+        borderSpec: msgRow.isOut ? Border.none : Border.flat(Qt.rgba(1, 1, 1, 0.06), 1)
 
-        BorderSurface {
-          id: bubbleSurface
+        Column {
+          id: bubbleContentCol
           anchors.left: parent.left
           anchors.right: parent.right
-          implicitHeight: bubbleLayout.implicitHeight + Style.space(12)
-          radius: Style.space(14)
-          color: msgRow.isOut ? Color.accent : Qt.rgba(1, 1, 1, 0.08)
-          borderSpec: msgRow.isOut ? Border.none : Border.flat(Qt.rgba(1, 1, 1, 0.06), 1)
+          anchors.top: parent.top
+          anchors.margins: Style.space(8)
+          spacing: Style.space(4)
 
-          Column {
-            id: bubbleLayout
-            anchors.left: parent.left; anchors.right: parent.right
-            anchors.margins: Style.space(8)
-            anchors.verticalCenter: parent.verticalCenter
+          // Sender name in group chats
+          Text {
+            visible: !msgRow.isOut && modelData.sender_name !== "" && (p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel))
+            width: parent.width
+            textFormat: Text.PlainText
+            text: modelData.sender_name || ""
+            color: modelData.sender_color || Color.accent
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.caption * 0.85
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          // Attached Photo Image
+          Image {
+            visible: modelData.media_path !== "" && modelData.media_path !== undefined
+            width: parent.width
+            height: Math.min(Style.space(160), width * 0.6)
+            source: modelData.media_path ? "file://" + modelData.media_path : ""
+            fillMode: Image.PreserveAspectCrop
+            sourceSize.width: 500; sourceSize.height: 300
+          }
+
+          // Message text body
+          Text {
+            visible: modelData.text !== ""
+            width: parent.width
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            text: modelData.text || ""
+            color: msgRow.isOut ? "#ffffff" : p.foreground
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          // Timestamp and status row
+          Row {
+            anchors.right: parent.right
             spacing: Style.space(4)
 
-            // Sender name in group chats
             Text {
-              visible: !msgRow.isOut && modelData.sender_name !== "" && (p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel))
               textFormat: Text.PlainText
-              text: modelData.sender_name || ""
-              color: modelData.sender_color || Color.accent
+              text: modelData.time || ""
+              color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.75) : p.dim
               font.family: p.fontFamily
-              font.pixelSize: Style.font.caption * 0.85
-              font.bold: true
+              font.pixelSize: Style.space(8)
             }
 
-            // Attached Photo Image
-            Image {
-              visible: modelData.media_path !== "" && modelData.media_path !== undefined
-              width: Math.min(parent.width, Style.space(260))
-              height: Style.space(150)
-              source: modelData.media_path ? "file://" + modelData.media_path : ""
-              fillMode: Image.PreserveAspectCrop
-              sourceSize.width: 520; sourceSize.height: 300
-            }
-
-            // Message text body
             Text {
-              visible: modelData.text !== ""
-              width: parent.width
-              textFormat: Text.PlainText
-              wrapMode: Text.Wrap
-              text: modelData.text || ""
-              color: msgRow.isOut ? "#ffffff" : p.foreground
+              visible: msgRow.isOut
+              text: "\uf00c"
+              color: Qt.rgba(1, 1, 1, 0.85)
               font.family: p.fontFamily
-              font.pixelSize: Style.font.bodySmall
-            }
-
-            // Timestamp and status row
-            Row {
-              anchors.right: parent.right
-              spacing: Style.space(3)
-
-              Text {
-                textFormat: Text.PlainText
-                text: modelData.time || ""
-                color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.75) : p.dim
-                font.family: p.fontFamily
-                font.pixelSize: Style.space(8)
-              }
-
-              Text {
-                visible: msgRow.isOut
-                text: "\uf00c"
-                color: Qt.rgba(1, 1, 1, 0.85)
-                font.family: p.fontFamily
-                font.pixelSize: Style.space(8)
-              }
+              font.pixelSize: Style.space(8)
             }
           }
         }
