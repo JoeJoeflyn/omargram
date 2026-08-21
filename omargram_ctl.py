@@ -209,44 +209,55 @@ def pick_file_dialog():
         return {"success": False, "error": str(e)}
     return {"success": True, "cancelled": True}
 
-def list_media_files(folder="pictures", limit=40):
+def browse_directory(dir_path="pictures", limit=80):
     home = os.path.expanduser("~")
-    if folder == "screenshots":
-        dirs = [os.path.join(home, "Pictures", "Screenshots"), os.path.join(home, "Pictures")]
-    elif folder == "downloads":
-        dirs = [os.path.join(home, "Downloads")]
-    elif folder == "pictures":
-        dirs = [os.path.join(home, "Pictures"), os.path.join(home, "Pictures", "Screenshots")]
+    if dir_path == "pictures":
+        path = os.path.join(home, "Pictures")
+    elif dir_path == "downloads":
+        path = os.path.join(home, "Downloads")
+    elif dir_path == "home" or dir_path == "~":
+        path = home
     else:
-        dirs = [os.path.expanduser(folder)]
+        path = os.path.expanduser(dir_path)
     
-    files = []
-    seen = set()
-    for d in dirs:
-        if not os.path.exists(d):
-            continue
-        try:
-            for entry in os.scandir(d):
-                if entry.is_file() and not entry.name.startswith("."):
-                    path = entry.path
-                    if path in seen:
-                        continue
-                    seen.add(path)
-                    st = entry.stat()
-                    ext = os.path.splitext(entry.name)[1].lower()
+    if not os.path.isdir(path):
+        path = os.path.join(home, "Pictures") if os.path.exists(os.path.join(home, "Pictures")) else home
+    
+    entries = []
+    parent_path = os.path.dirname(os.path.abspath(path))
+    
+    try:
+        with os.scandir(path) as it:
+            for e in it:
+                if e.name.startswith("."):
+                    continue
+                try:
+                    is_dir = e.is_dir(follow_symlinks=True)
+                    st = e.stat(follow_symlinks=True)
+                    ext = os.path.splitext(e.name)[1].lower()
                     is_img = ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg")
-                    files.append({
-                        "name": entry.name,
-                        "path": path,
-                        "size": st.st_size,
-                        "mtime": int(st.st_mtime),
+                    entries.append({
+                        "name": e.name,
+                        "path": e.path,
+                        "is_dir": is_dir,
                         "is_image": is_img,
-                        "preview": "file://" + path if is_img else ""
+                        "size": st.st_size if not is_dir else 0,
+                        "mtime": int(st.st_mtime),
+                        "preview": "file://" + e.path if is_img else ""
                     })
-        except Exception:
-            pass
-    files.sort(key=lambda x: x["mtime"], reverse=True)
-    return files[:limit]
+                except Exception:
+                    pass
+    except Exception as err:
+        return {"success": False, "error": str(err), "entries": [], "current_path": path, "parent_path": parent_path}
+    
+    # Folders first, then files by latest modification time
+    entries.sort(key=lambda x: (not x["is_dir"], -x["mtime"]))
+    return {
+        "success": True,
+        "current_path": path,
+        "parent_path": parent_path if parent_path != path else "",
+        "entries": entries[:limit]
+    }
 
 def main():
     if len(sys.argv) < 2:
@@ -257,9 +268,9 @@ def main():
 
     if action == "status":
         print(json.dumps(send_daemon_cmd({"action": "status"})))
-    elif action == "list_files":
+    elif action in ("list_files", "browse", "browse_files"):
         folder = sys.argv[2] if len(sys.argv) > 2 else "pictures"
-        print(json.dumps({"success": True, "files": list_media_files(folder)}))
+        print(json.dumps(browse_directory(folder)))
     elif action == "paste_image":
         print(json.dumps(extract_clipboard_image()))
     elif action == "pick_file":
