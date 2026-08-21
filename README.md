@@ -18,7 +18,7 @@ OmarGram lets you read and reply to your Telegram chats directly from the Omarch
 - ↗️ **Forward & Multi-Select**: Batch select messages with custom checkboxes to forward, copy, or delete at once.
 - 🎨 **Theme-Native Visuals**: Matches your active Omarchy colorway, dynamic accent colors, and custom typography.
 - 🔒 **Security-First Architecture**:
-  - **End-to-End MTProto**: Official Telegram MTProto encryption directly to Telegram servers.
+  - **Encrypted MTProto Transport**: Official client-to-server MTProto 2.0 protocol directly to Telegram cloud servers.
   - **Owner-Only Local Caching**: Enforces strict `0700` directory modes and `0600` file permissions on `~/.config/omargram` and `~/.cache/omargram` to protect user metadata and session tokens from other local users.
   - **Isolated IPC & PID Verification**: Dedicated UNIX socket in `$XDG_RUNTIME_DIR/omargram` with `0600` socket permissions and PID `starttime` verification preventing process hijacking or PID-reuse termination.
   - **Injection & SSRF Safe**: All incoming message text and remote metadata strictly rendered as `Text.PlainText`.

@@ -798,7 +798,7 @@ Panel {
 
               Text {
                 textFormat: Text.PlainText
-                text: "End-to-end MTProto encrypted via Telegram API"
+                text: "Encrypted MTProto connection via official Telegram API"
                 color: Qt.darker(root.dim, 1.2)
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption

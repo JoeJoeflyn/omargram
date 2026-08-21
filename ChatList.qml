@@ -314,9 +314,22 @@ Item {
         }
       }
 
-      ToolTip.visible: rowMouse.containsMouse && p.sidebarCollapsed
-      ToolTip.delay: 250
-      ToolTip.text: modelData.unread_count > 0 ? (modelData.title + " (" + modelData.unread_count + " unread)") : modelData.title
+      ToolTip {
+        visible: rowMouse.containsMouse && p.sidebarCollapsed
+        delay: 250
+        contentItem: Text {
+          textFormat: Text.PlainText
+          text: modelData.unread_count > 0 ? (modelData.title + " (" + modelData.unread_count + " unread)") : (modelData.title || "")
+          color: Color.popups.foreground
+          font.family: p.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+        background: BorderSurface {
+          color: Color.popups.background
+          radius: Style.cornerRadius
+          borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15), 1)
+        }
+      }
 
       Item {
         anchors.fill: parent
