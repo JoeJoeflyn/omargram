@@ -227,12 +227,12 @@ Item {
         })
       }
 
-      // 1. Incoming Sender Avatar (Positioned left of the bubble)
+      // 1. Incoming Sender Avatar (Only in group/channel chats)
       Item {
         id: leftAvatar
-        visible: !msgRow.isOut
+        visible: !msgRow.isOut && (p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel))
         anchors.left: parent.left
-        anchors.leftMargin: Style.space(6)
+        anchors.leftMargin: Style.space(8)
         anchors.bottom: bubbleSurface.bottom
         width: Style.space(28); height: Style.space(28)
         opacity: msgRow.isSnapping ? 0.0 : 1.0
@@ -265,55 +265,17 @@ Item {
         }
       }
 
-      // 2. Outgoing User Avatar (Positioned right of the bubble)
-      Item {
-        id: rightAvatar
-        visible: msgRow.isOut
-        anchors.right: parent.right
-        anchors.rightMargin: Style.space(6)
-        anchors.bottom: bubbleSurface.bottom
-        width: Style.space(28); height: Style.space(28)
-        opacity: msgRow.isSnapping ? 0.0 : 1.0
-
-        BorderSurface {
-          anchors.fill: parent
-          radius: width / 2.0
-          color: Color.accent
-          borderSpec: Border.none
-          clip: true
-
-          Image {
-            visible: p.userAvatar !== "" && p.userAvatar !== undefined
-            anchors.fill: parent
-            source: p.userAvatar ? "file://" + p.userAvatar : ""
-            fillMode: Image.PreserveAspectCrop
-            sourceSize.width: 56; sourceSize.height: 56
-          }
-
-          Text {
-            visible: !p.userAvatar
-            anchors.centerIn: parent
-            textFormat: Text.PlainText
-            text: p.userInitials || "ME"
-            color: "#ffffff"
-            font.family: p.fontFamily
-            font.pixelSize: Style.font.caption * 0.8
-            font.bold: true
-          }
-        }
-      }
-
-      // 3. Message Bubble Surface
+      // 2. Message Bubble Surface
       BorderSurface {
         id: bubbleSurface
-        anchors.left: msgRow.isOut ? undefined : leftAvatar.right
-        anchors.leftMargin: msgRow.isOut ? 0 : Style.space(6)
-        anchors.right: msgRow.isOut ? rightAvatar.left : undefined
-        anchors.rightMargin: msgRow.isOut ? Style.space(6) : 0
+        anchors.left: msgRow.isOut ? undefined : (leftAvatar.visible ? leftAvatar.right : parent.left)
+        anchors.leftMargin: msgRow.isOut ? 0 : (leftAvatar.visible ? Style.space(6) : Style.space(10))
+        anchors.right: msgRow.isOut ? parent.right : undefined
+        anchors.rightMargin: msgRow.isOut ? Style.space(10) : 0
         anchors.top: parent.top
-        width: Math.min(msgListView.width * 0.68, Math.max(Style.space(110), bubbleContentCol.implicitWidth + Style.space(24)))
-        height: bubbleContentCol.implicitHeight + Style.space(16)
-        radius: Style.space(14)
+        width: Math.min(msgListView.width * 0.72, Math.max(timeStatusRow.implicitWidth + Style.space(24), (modelData.media_path || (modelData.webpage && modelData.webpage.photo)) ? (msgListView.width * 0.65) : (bubbleText.implicitWidth + Style.space(20))))
+        height: bubbleContentCol.implicitHeight + Style.space(14)
+        radius: Style.space(16)
         color: msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)
         borderSpec: msgRow.isOut ? Border.none : Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.1), 1)
 
@@ -366,6 +328,7 @@ Item {
 
           // Message text body
           Text {
+            id: bubbleText
             visible: modelData.text !== ""
             width: parent.width
             textFormat: Text.PlainText
@@ -374,6 +337,7 @@ Item {
             color: msgRow.isOut ? "#ffffff" : p.foreground
             font.family: p.fontFamily
             font.pixelSize: Style.font.bodySmall
+            lineHeight: 1.15
           }
 
           // Webpage / Social Media Link Preview Card
@@ -471,9 +435,9 @@ Item {
                 required property int index
                 readonly property bool isChosen: modelData.chosen === true
 
-                height: Style.space(22)
-                implicitWidth: rxRow.implicitWidth + Style.space(12)
-                radius: Style.space(11)
+                height: Style.space(20)
+                implicitWidth: rxRow.implicitWidth + Style.space(10)
+                radius: Style.space(10)
                 color: isChosen ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.35) : (rxMouse.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15) : (msgRow.isOut ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)))
                 borderSpec: isChosen ? Border.flat(Color.accent, 1) : Border.none
 
@@ -484,7 +448,7 @@ Item {
 
                   Text {
                     text: modelData.emoticon || "👍"
-                    font.pixelSize: Style.space(11)
+                    font.pixelSize: Style.space(10)
                     anchors.verticalCenter: parent.verticalCenter
                   }
 
@@ -492,7 +456,7 @@ Item {
                     text: String(modelData.count || 1)
                     color: msgRow.isOut ? "#ffffff" : p.foreground
                     font.family: p.fontFamily
-                    font.pixelSize: Style.space(9)
+                    font.pixelSize: Style.space(8.5)
                     font.bold: true
                     anchors.verticalCenter: parent.verticalCenter
                   }
@@ -513,8 +477,9 @@ Item {
 
           // Timestamp and status row
           Row {
+            id: timeStatusRow
             anchors.right: parent.right
-            spacing: Style.space(6)
+            spacing: Style.space(4)
 
             Text {
               textFormat: Text.PlainText
