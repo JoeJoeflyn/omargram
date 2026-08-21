@@ -1,27 +1,8 @@
 # OmarGram 💬
 
-**Native, blazing-fast, ultra-low-memory Telegram status bar client for the Omarchy Quattro Desktop.**
+**Native, lightweight Telegram status bar client for the Omarchy Quattro Desktop.**
 
-OmarGram brings your Telegram messages directly into the Omarchy bar — read chats, check unread counts, search conversations, and send replies instantly without switching windows or breaking your focus.
-
----
-
-## 🎯 Why OmarGram?
-
-The core reason for building OmarGram is **workflow continuity and efficiency**:
-
-> *"I wanted to reply and read chats seamlessly in the same active workspace without opening a heavy separate window for Telegram."*
-
-Traditional desktop messaging apps (Electron wrappers and Chromium web clients) consume hundreds of megabytes of RAM, clutter window switchers, and pull you away from your active work. **OmarGram embeds Telegram natively into the Omarchy shell bar as a quick flyout capsule** — open with one click, reply in 2 seconds, and get right back to what you were doing.
-
----
-
-## ⚡ Performance & Low Resource Footprint
-
-* 🪶 **Minimal RAM Usage**: Consumes only **~15MB – 25MB RAM** (compared to 500MB – 1.2GB for Telegram Desktop / Web wrappers).
-* 🔋 **Zero Idle CPU**: Uses an asynchronous event-driven MTProto daemon that stays completely idle until new messages arrive.
-* 🚀 **GPU-Accelerated QML**: Built with pure Qt Quick Scene Graph — ultra snappy 60 FPS transitions without browser overhead.
-* 📦 **Instant 0ms Updates**: Local reaction chips, message selection, and scroll-stable viewport with zero redundant model rebuilds.
+OmarGram lets you read and reply to your Telegram chats directly from the Omarchy status bar on the same screen, without needing to open a new window for Telegram. It is designed to be lightweight, snappy, and consume minimal RAM.
 
 ---
 
