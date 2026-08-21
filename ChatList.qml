@@ -3,7 +3,7 @@ import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 
-// Sidebar displaying chats, search, filters, and unread badges
+// Sidebar displaying chats, search, filters, and user profile header
 Item {
   id: root
   property var p  // Panel root
@@ -17,7 +17,82 @@ Item {
     anchors.fill: parent
     spacing: Style.space(6)
 
-    // 1. Search Box
+    // 1. User Profile Header Card
+    BorderSurface {
+      width: parent.width
+      height: Style.space(40)
+      radius: Style.cornerRadius
+      color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.04)
+      borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.06), 1)
+
+      Row {
+        anchors.fill: parent
+        anchors.leftMargin: Style.space(8)
+        anchors.rightMargin: Style.space(8)
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(8)
+
+        // User Avatar
+        BorderSurface {
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(26); height: Style.space(26)
+          radius: width / 2.0
+          color: Color.accent
+          borderSpec: Border.none
+          clip: true
+
+          Image {
+            visible: p.userAvatar !== "" && p.userAvatar !== undefined
+            anchors.fill: parent
+            source: p.userAvatar ? "file://" + p.userAvatar : ""
+            fillMode: Image.PreserveAspectCrop
+            sourceSize.width: 52; sourceSize.height: 52
+          }
+
+          Text {
+            visible: !p.userAvatar
+            anchors.centerIn: parent
+            textFormat: Text.PlainText
+            text: p.userInitials || "ME"
+            color: "#ffffff"
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.caption * 0.8
+            font.bold: true
+          }
+        }
+
+        // User Name
+        Text {
+          width: parent.width - Style.space(70)
+          anchors.verticalCenter: parent.verticalCenter
+          textFormat: Text.PlainText
+          text: p.userName || "Connected"
+          color: p.foreground
+          font.family: p.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+          elide: Text.ElideRight
+        }
+
+        // Logout Button
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: "\uf2f5"
+          color: logoutMouse.containsMouse ? p.urgent : p.dim
+          font.family: p.fontFamily
+          font.pixelSize: Style.font.caption
+
+          MouseArea {
+            id: logoutMouse
+            anchors.fill: parent; anchors.margins: -4
+            hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+            onClicked: p.logout()
+          }
+        }
+      }
+    }
+
+    // 2. Search Box
     BorderSurface {
       width: parent.width
       height: Style.space(32)
@@ -80,7 +155,7 @@ Item {
       }
     }
 
-    // 2. Filter Chips (All, DMs, Groups, Channels)
+    // 3. Filter Chips (All, DMs, Groups, Channels)
     Row {
       width: parent.width
       spacing: Style.space(4)
@@ -100,7 +175,7 @@ Item {
           implicitWidth: chipText.implicitWidth + Style.space(12)
           radius: Style.space(11)
           color: isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : "transparent"
-          borderSpec: isSelected ? Border.flat(Color.accent, 1) : Border.flat(Qt.rgba(1, 1, 1, 0.08), 1)
+          borderSpec: isSelected ? Border.flat(Color.accent, 1) : Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08), 1)
 
           Text {
             id: chipText
@@ -120,11 +195,11 @@ Item {
       }
     }
 
-    // 3. Chats ListView
+    // 4. Chats ListView
     ListView {
       id: chatListView
       width: parent.width
-      height: parent.height - Style.space(66)
+      height: parent.height - Style.space(112)
       clip: true
       spacing: Style.space(2)
       boundsBehavior: Flickable.StopAtBounds
@@ -166,7 +241,7 @@ Item {
             BorderSurface {
               anchors.fill: parent
               radius: width / 2.0
-              color: modelData.color || Color.accent
+              color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.25)
               borderSpec: Border.none
               clip: true
 
@@ -183,7 +258,7 @@ Item {
                 anchors.centerIn: parent
                 textFormat: Text.PlainText
                 text: modelData.initials || "TG"
-                color: "#ffffff"
+                color: p.foreground
                 font.family: p.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -195,8 +270,8 @@ Item {
               visible: modelData.online === true
               width: Style.space(8); height: Style.space(8)
               radius: width / 2.0
-              color: "#4caf50"
-              border.color: "#181a20"; border.width: 1.5
+              color: Color.accent
+              border.color: Color.popups.background; border.width: 1.5
               anchors.bottom: parent.bottom; anchors.right: parent.right
             }
           }
@@ -209,27 +284,47 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             height: Style.space(36)
 
-            // Top row: Title + Time
+            // Top row: Title + Time / Delete button
             Item {
               anchors.top: parent.top
               anchors.left: parent.left
               anchors.right: parent.right
               height: Style.space(18)
 
-              Text {
-                id: timeText
+              Row {
+                id: topActionRow
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                textFormat: Text.PlainText
-                text: (modelData.last_message && modelData.last_message.time) ? modelData.last_message.time : ""
-                color: modelData.unread_count > 0 ? Color.accent : p.dim
-                font.family: p.fontFamily
-                font.pixelSize: Style.font.caption * 0.8
+                spacing: Style.space(6)
+
+                Text {
+                  visible: rowMouse.containsMouse
+                  text: "\uf2ed"
+                  color: delMouse.containsMouse ? p.urgent : p.dim
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.font.caption * 0.85
+
+                  MouseArea {
+                    id: delMouse
+                    anchors.fill: parent; anchors.margins: -4
+                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: p.deleteChat(modelData.id)
+                  }
+                }
+
+                Text {
+                  id: timeText
+                  textFormat: Text.PlainText
+                  text: (modelData.last_message && modelData.last_message.time) ? modelData.last_message.time : ""
+                  color: modelData.unread_count > 0 ? Color.accent : p.dim
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.font.caption * 0.8
+                }
               }
 
               Text {
                 anchors.left: parent.left
-                anchors.right: timeText.left
+                anchors.right: topActionRow.left
                 anchors.rightMargin: Style.space(4)
                 anchors.verticalCenter: parent.verticalCenter
                 textFormat: Text.PlainText

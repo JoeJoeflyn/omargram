@@ -27,6 +27,8 @@ Panel {
   property bool isAuthorized: false
   property string userName: ""
   property string userUsername: ""
+  property string userAvatar: ""
+  property string userInitials: "ME"
   property int unreadCount: 0
 
   property var allChats: []
@@ -136,6 +138,18 @@ Panel {
     activeMessages = []
   }
 
+  function deleteChat(chatId) {
+    if (!chatId) return
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "delete_chat", String(chatId)]
+    actionProc.running = true
+
+    allChats = allChats.filter(function(c) { return c.id !== chatId })
+    if (selectedChat && selectedChat.id === chatId) {
+      closeActiveChat()
+    }
+  }
+
   function loadMessages(chatId) {
     if (!chatId) return
     loadingMessages = true
@@ -156,9 +170,9 @@ Panel {
     var optMsg = {
       id: Date.now(),
       chat_id: cid,
-      sender_name: "You",
-      sender_avatar: "",
-      sender_initials: "ME",
+      sender_name: userName || "You",
+      sender_avatar: userAvatar,
+      sender_initials: userInitials,
       sender_color: Color.accent,
       text: text,
       time: timeStr,
@@ -238,6 +252,8 @@ Panel {
           if (d.user) {
             root.userName = d.user.name || ""
             root.userUsername = d.user.username || ""
+            root.userAvatar = d.user.avatar || ""
+            root.userInitials = d.user.initials || "ME"
           }
           if (!root.isAuthorized && root.opened && !root.qrPath) {
             root.startQrLogin()

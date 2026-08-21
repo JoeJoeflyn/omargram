@@ -354,11 +354,15 @@ class OmarGramDaemon:
             if is_auth:
                 me = await self.client.get_me()
                 if me:
+                    me_avatar = await self.get_chat_avatar(me)
+                    my_name = f"{me.first_name or ''} {me.last_name or ''}".strip() or me.username or "Me"
                     user_info = {
                         "id": me.id,
-                        "name": f"{me.first_name or ''} {me.last_name or ''}".strip(),
+                        "name": my_name,
                         "username": me.username or "",
-                        "phone": me.phone or ""
+                        "phone": me.phone or "",
+                        "avatar": me_avatar,
+                        "initials": get_initials(my_name)
                     }
             return {
                 "running": True,
@@ -367,6 +371,20 @@ class OmarGramDaemon:
                 "unread_total": self.unread_total,
                 "chats_count": len(self.dialogs_cache)
             }
+
+        elif action == "delete_chat":
+            chat_id = cmd_dict.get("chat_id")
+            if not chat_id:
+                return {"success": False, "error": "chat_id required"}
+            try:
+                cid = int(chat_id)
+                entity = await self.client.get_entity(cid)
+                await self.client.delete_dialog(entity)
+                self.dialogs_cache = [d for d in self.dialogs_cache if d.get("id") != cid]
+                await self.update_unread_count()
+                return {"success": True, "chat_id": cid}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
 
         elif action == "dialogs":
             lim = int(cmd_dict.get("limit", 40))

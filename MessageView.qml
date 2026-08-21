@@ -3,7 +3,7 @@ import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 
-// Chat message stream with avatars, sender info, photos/media, and auto-scroll
+// Chat message stream with avatars for both sender and user, Omarchy theme sync, and delete chat action
 Item {
   id: root
   property var p  // Panel root
@@ -28,13 +28,13 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(8)
 
-      // Header Avatar
+      // Header Chat Avatar
       BorderSurface {
         anchors.verticalCenter: parent.verticalCenter
         width: Style.space(32); height: Style.space(32)
         radius: width / 2.0
-        color: (p.selectedChat && p.selectedChat.color) ? p.selectedChat.color : Color.accent
-        borderSpec: Border.none
+        color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.25)
+        borderSpec: Border.flat(Color.accent, 1)
         clip: true
 
         Image {
@@ -50,7 +50,7 @@ Item {
           anchors.centerIn: parent
           textFormat: Text.PlainText
           text: p.selectedChat ? p.selectedChat.initials : "TG"
-          color: "#ffffff"
+          color: p.foreground
           font.family: p.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -59,7 +59,7 @@ Item {
 
       // Title & Status Column
       Column {
-        width: parent.width - Style.space(130)
+        width: parent.width - Style.space(150)
         anchors.verticalCenter: parent.verticalCenter
         spacing: 1
 
@@ -83,7 +83,7 @@ Item {
             if (p.selectedChat.is_group) return "group"
             return p.selectedChat.username ? "@" + p.selectedChat.username : "last seen recently"
           }
-          color: (p.selectedChat && p.selectedChat.online) ? "#4caf50" : p.dim
+          color: (p.selectedChat && p.selectedChat.online) ? Color.accent : p.dim
           font.family: p.fontFamily
           font.pixelSize: Style.font.caption * 0.85
         }
@@ -107,6 +107,13 @@ Item {
           tooltipText: "Mark chat as read"
           foreground: p.foreground; hoverColor: Color.accent; fontFamily: p.fontFamily
           onClicked: p.markChatRead(p.selectedChat.id)
+        }
+
+        PanelActionButton {
+          iconText: "\uf2ed"
+          tooltipText: "Delete / Leave chat"
+          foreground: p.foreground; hoverColor: p.urgent; fontFamily: p.fontFamily
+          onClicked: p.deleteChat(p.selectedChat.id)
         }
 
         PanelActionButton {
@@ -172,9 +179,9 @@ Item {
       width: msgListView.width
       height: bubbleContentCol.implicitHeight + Style.space(16)
 
-      // Incoming Sender Avatar (Positioned left of the bubble)
+      // 1. Incoming Sender Avatar (Positioned left of the bubble)
       Item {
-        id: avatarContainer
+        id: leftAvatar
         visible: !msgRow.isOut
         anchors.left: parent.left
         anchors.leftMargin: Style.space(6)
@@ -185,7 +192,7 @@ Item {
         BorderSurface {
           anchors.fill: parent
           radius: width / 2.0
-          color: modelData.sender_color || Color.accent
+          color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.25)
           borderSpec: Border.none
           clip: true
 
@@ -202,6 +209,44 @@ Item {
             anchors.centerIn: parent
             textFormat: Text.PlainText
             text: modelData.sender_initials || "TG"
+            color: p.foreground
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.caption * 0.8
+            font.bold: true
+          }
+        }
+      }
+
+      // 2. Outgoing User Avatar (Positioned right of the bubble)
+      Item {
+        id: rightAvatar
+        visible: msgRow.isOut
+        anchors.right: parent.right
+        anchors.rightMargin: Style.space(6)
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Style.space(8)
+        width: Style.space(28); height: Style.space(28)
+
+        BorderSurface {
+          anchors.fill: parent
+          radius: width / 2.0
+          color: Color.accent
+          borderSpec: Border.none
+          clip: true
+
+          Image {
+            visible: p.userAvatar !== "" && p.userAvatar !== undefined
+            anchors.fill: parent
+            source: p.userAvatar ? "file://" + p.userAvatar : ""
+            fillMode: Image.PreserveAspectCrop
+            sourceSize.width: 56; sourceSize.height: 56
+          }
+
+          Text {
+            visible: !p.userAvatar
+            anchors.centerIn: parent
+            textFormat: Text.PlainText
+            text: p.userInitials || "ME"
             color: "#ffffff"
             font.family: p.fontFamily
             font.pixelSize: Style.font.caption * 0.8
@@ -210,19 +255,19 @@ Item {
         }
       }
 
-      // Message Bubble Surface
+      // 3. Message Bubble Surface
       BorderSurface {
         id: bubbleSurface
-        anchors.left: msgRow.isOut ? undefined : avatarContainer.right
+        anchors.left: msgRow.isOut ? undefined : leftAvatar.right
         anchors.leftMargin: msgRow.isOut ? 0 : Style.space(6)
-        anchors.right: msgRow.isOut ? parent.right : undefined
-        anchors.rightMargin: msgRow.isOut ? Style.space(8) : 0
+        anchors.right: msgRow.isOut ? rightAvatar.left : undefined
+        anchors.rightMargin: msgRow.isOut ? Style.space(6) : 0
         anchors.top: parent.top
-        width: Math.min(msgListView.width * 0.72, Math.max(Style.space(100), bubbleContentCol.implicitWidth + Style.space(24)))
+        width: Math.min(msgListView.width * 0.68, Math.max(Style.space(100), bubbleContentCol.implicitWidth + Style.space(24)))
         height: bubbleContentCol.implicitHeight + Style.space(16)
         radius: Style.space(14)
-        color: msgRow.isOut ? Color.accent : Qt.rgba(1, 1, 1, 0.08)
-        borderSpec: msgRow.isOut ? Border.none : Border.flat(Qt.rgba(1, 1, 1, 0.06), 1)
+        color: msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)
+        borderSpec: msgRow.isOut ? Border.none : Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.1), 1)
 
         Column {
           id: bubbleContentCol
@@ -238,7 +283,7 @@ Item {
             width: parent.width
             textFormat: Text.PlainText
             text: modelData.sender_name || ""
-            color: modelData.sender_color || Color.accent
+            color: Color.accent
             font.family: p.fontFamily
             font.pixelSize: Style.font.caption * 0.85
             font.bold: true
