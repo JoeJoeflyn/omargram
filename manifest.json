@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "omargram",
+  "name": "OmarGram",
+  "version": "1.0.0",
+  "author": "JoeJoeflyn",
+  "license": "MIT",
+  "description": "Native status bar Telegram client for Omarchy. Fast chat previews, instant messaging, unread notifications, and QR-code login.",
+  "repository": "https://github.com/JoeJoeflyn/omargram",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "OmarGram",
+    "description": "Native status bar Telegram client with live unread badge and instant chat window.",
+    "category": "Communication",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "pollIntervalSec": 5
+    },
+    "schema": [
+      {
+        "key": "pollIntervalSec",
+        "type": "integer",
+        "label": "Poll interval (seconds)",
+        "min": 2,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 5
+      }
+    ]
+  }
+}

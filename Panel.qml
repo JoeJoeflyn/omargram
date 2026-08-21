@@ -1,0 +1,450 @@
+import QtQuick
+import QtQuick.Controls
+import Quickshell
+import Quickshell.Io
+import qs.Commons
+import qs.Ui
+
+// Core popout window orchestrator for OmarGram Telegram client
+Panel {
+  id: root
+  moduleName: "omargram"
+  ipcTarget: "omargram"
+  manageIpc: false
+
+  property var anchorItem: null
+  property bool openedFromHotkey: false
+  property var hostWidget: null
+  readonly property var barIdentity: hostWidget || root
+
+  readonly property color foreground: bar ? bar.foreground : Color.foreground
+  readonly property color urgent: bar ? bar.urgent : Color.urgent
+  readonly property color dim: Qt.darker(foreground, 1.55)
+  readonly property color surface: Color.popups.background
+  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+
+  // ---- State
+  property bool isAuthorized: false
+  property string userName: ""
+  property string userUsername: ""
+  property int unreadCount: 0
+
+  property var allChats: []
+  property var filteredChats: []
+  property string chatFilter: "all" // "all", "users", "groups", "channels"
+  property string searchQuery: ""
+
+  property var selectedChat: null
+  property var activeMessages: []
+  property bool loadingMessages: false
+
+  property string qrPath: ""
+  property double qrTimestamp: 0
+
+  readonly property bool messagesProcRunning: messagesProc.running
+  readonly property bool dialogsProcRunning: dialogsProc.running
+
+  Component.onCompleted: {
+    root.refresh()
+  }
+
+  onSearchQueryChanged: filterChatsList()
+  onChatFilterChanged: filterChatsList()
+  onAllChatsChanged: filterChatsList()
+
+  function filterChatsList() {
+    var list = allChats || []
+    var q = searchQuery.trim().toLowerCase()
+
+    if (chatFilter === "users") list = list.filter(function(c) { return c.is_user })
+    else if (chatFilter === "groups") list = list.filter(function(c) { return c.is_group })
+    else if (chatFilter === "channels") list = list.filter(function(c) { return c.is_channel })
+
+    if (q) {
+      list = list.filter(function(c) {
+        var t = (c.title || "").toLowerCase()
+        var u = (c.username || "").toLowerCase()
+        var m = (c.last_message && c.last_message.text) ? c.last_message.text.toLowerCase() : ""
+        return t.indexOf(q) !== -1 || u.indexOf(q) !== -1 || m.indexOf(q) !== -1
+      })
+    }
+    filteredChats = list
+  }
+
+  // ---- Lifecycle
+  function open() {
+    openedFromHotkey = false
+    setCenterHoverRevealSuppressed(false)
+    root.controller.show()
+    root.refresh()
+  }
+
+  function openFromHotkey() {
+    openedFromHotkey = true
+    root.controller.show()
+    root.refresh()
+    Qt.callLater(function() { if (root.opened) setCenterHoverRevealSuppressed(true) })
+  }
+
+  function close() {
+    setCenterHoverRevealSuppressed(false)
+    root.controller.hide()
+  }
+
+  function toggle() {
+    if (root.opened) root.close()
+    else root.openFromHotkey()
+  }
+
+  function switchPanel(direction) {
+    if (root.bar && typeof root.bar.switchPanelFrom === "function")
+      return root.bar.switchPanelFrom(root.barIdentity, direction)
+    return false
+  }
+
+  function setCenterHoverRevealSuppressed(value) {
+    if (root.bar && "centerHoverRevealSuppressed" in root.bar)
+      root.bar.centerHoverRevealSuppressed = value
+  }
+
+  // ---- Actions
+  function refresh() {
+    if (!statusProc.running) statusProc.running = true
+    if (root.isAuthorized && !dialogsProc.running) dialogsProc.running = true
+  }
+
+  function selectChat(chat) {
+    if (!chat) return
+    selectedChat = chat
+    loadMessages(chat.id)
+    markChatRead(chat.id)
+  }
+
+  function selectChatById(chatId) {
+    for (var i = 0; i < allChats.length; i++) {
+      if (allChats[i].id === chatId) {
+        selectChat(allChats[i])
+        break
+      }
+    }
+  }
+
+  function closeActiveChat() {
+    selectedChat = null
+    activeMessages = []
+  }
+
+  function loadMessages(chatId) {
+    if (!chatId) return
+    loadingMessages = true
+    messagesProc.running = false
+    messagesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "messages", String(chatId), "50"]
+    messagesProc.running = true
+  }
+
+  function sendMessageToActiveChat(text) {
+    if (!text || !selectedChat) return
+    var cid = selectedChat.id
+    
+    // Optimistically add message to UI immediately for 0ms feedback
+    var now = new Date()
+    var hours = now.getHours()
+    var mins = now.getMinutes()
+    var timeStr = (hours < 10 ? "0" + hours : hours) + ":" + (mins < 10 ? "0" + mins : mins)
+    
+    var optMsg = {
+      id: Date.now(),
+      chat_id: cid,
+      sender_name: "You",
+      sender_avatar: "",
+      sender_color: Color.accent,
+      text: text,
+      time: timeStr,
+      date: "Today",
+      out: true,
+      media_type: "",
+      media_path: ""
+    }
+    
+    var currentMsgs = [].concat(activeMessages)
+    currentMsgs.push(optMsg)
+    activeMessages = currentMsgs
+
+    // Send via daemon
+    sendProc.running = false
+    sendProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send", String(cid), text]
+    sendProc.running = true
+  }
+
+  function markChatRead(chatId) {
+    if (!chatId) return
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "mark_read", String(chatId)]
+    actionProc.running = true
+
+    // Optimistically zero unread badge
+    var updated = []
+    for (var i = 0; i < allChats.length; i++) {
+      var c = Object.assign({}, allChats[i])
+      if (c.id === chatId) c.unread_count = 0
+      updated.push(c)
+    }
+    allChats = updated
+  }
+
+  function startQrLogin() {
+    qrProc.running = false
+    qrProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "start_qr"]
+    qrProc.running = true
+  }
+
+  function sendPhoneCode(phone) {
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send_code", phone]
+    actionProc.running = true
+  }
+
+  function submitCode(code, pwd) {
+    actionProc.running = false
+    var args = ["submit_code", code]
+    if (pwd) args.push(pwd)
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", "")].concat(args)
+    actionProc.running = true
+  }
+
+  function logout() {
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "logout"]
+    actionProc.running = true
+    isAuthorized = false
+    selectedChat = null
+    allChats = []
+    activeMessages = []
+    startQrLogin()
+  }
+
+  // ---- Processes
+  Process {
+    id: statusProc
+    command: ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "status"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(text || "{}")
+          var wasAuth = root.isAuthorized
+          root.isAuthorized = d.authorized === true
+          root.unreadCount = d.unread_total || 0
+          if (d.user) {
+            root.userName = d.user.name || ""
+            root.userUsername = d.user.username || ""
+          }
+          if (!root.isAuthorized && root.opened && !root.qrPath) {
+            root.startQrLogin()
+          } else if (!wasAuth && root.isAuthorized) {
+            dialogsProc.running = true
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+  Process {
+    id: dialogsProc
+    command: ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "dialogs", "40"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(text || "{}")
+          if (d.success && d.chats) {
+            root.allChats = d.chats
+            root.unreadCount = d.unread_total || 0
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+  Process {
+    id: messagesProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.loadingMessages = false
+        try {
+          var d = JSON.parse(text || "{}")
+          if (d.success && d.messages) {
+            root.activeMessages = d.messages
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+  Process {
+    id: sendProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(text || "{}")
+          if (d.success && root.selectedChat) {
+            root.loadMessages(root.selectedChat.id)
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+  Process {
+    id: qrProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(text || "{}")
+          if (d.success && d.qr_path) {
+            root.qrPath = d.qr_path
+            root.qrTimestamp = Date.now()
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+  Process {
+    id: actionProc
+    onExited: function() {
+      root.refresh()
+    }
+  }
+
+  // Background Poll Timer
+  Timer {
+    id: pollTimer
+    interval: root.opened ? 2500 : 8000
+    running: true; repeat: true; triggeredOnStart: true
+    onTriggered: root.refresh()
+  }
+
+  // IPC
+  IpcHandler {
+    target: "omargram"
+    function open() { root.openFromHotkey() }
+    function close() { root.close() }
+    function toggle() { root.toggle() }
+    function chat(chatId) {
+      root.openFromHotkey()
+      root.selectChatById(chatId)
+    }
+  }
+
+  // ---- Presentation
+  panelWidth: Style.space(640)
+  panelHeight: Style.space(480)
+
+  // Floating Popout Container
+  PopupWindow {
+    id: popoutWindow
+    anchorItem: root.anchorItem
+    visible: root.opened
+    width: root.panelWidth
+    height: root.panelHeight
+
+    onVisibleChanged: {
+      if (visible) {
+        root.refresh()
+        if (!root.isAuthorized) root.startQrLogin()
+      }
+    }
+
+    Item {
+      id: contentCard
+      anchors.fill: parent
+      anchors.margins: Style.space(8)
+
+      BorderSurface {
+        anchors.fill: parent
+        radius: Style.cornerRadius * 1.5
+        color: Color.popups.background
+        borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.08), 1)
+        clip: true
+
+        // 1. Auth View (When not logged in)
+        AuthView {
+          id: authView
+          visible: !root.isAuthorized
+          p: root
+        }
+
+        // 2. Main Two-Column Layout (When logged in)
+        Row {
+          id: mainView
+          visible: root.isAuthorized
+          anchors.fill: parent
+          anchors.margins: Style.space(8)
+          spacing: Style.space(8)
+
+          // Left Chats Sidebar
+          ChatList {
+            id: chatListComp
+            p: root
+          }
+
+          // Vertical Separator
+          Rectangle {
+            width: 1; height: parent.height
+            color: Qt.rgba(1, 1, 1, 0.07)
+          }
+
+          // Right Chat Stream / Message Area
+          Item {
+            id: rightPane
+            width: parent.width - chatListComp.width - Style.space(9)
+            height: parent.height
+
+            // Empty state (No chat selected)
+            Column {
+              visible: !root.selectedChat
+              anchors.centerIn: parent
+              spacing: Style.space(10)
+
+              BorderSurface {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Style.space(54); height: Style.space(54)
+                radius: width / 2.0
+                color: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.15)
+                borderSpec: Border.flat(Color.accent, 1)
+
+                Text {
+                  anchors.centerIn: parent
+                  text: "\uf2c6"
+                  color: Color.accent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.title * 1.4
+                }
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                text: "Select a chat to start messaging"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                anchors.horizontalCenter: parent.horizontalCenter
+              }
+            }
+
+            // Active Chat Conversation Area
+            MessageView {
+              id: messageViewComp
+              visible: root.selectedChat !== null
+              p: root
+            }
+          }
+        }
+      }
+    }
+  }
+}
