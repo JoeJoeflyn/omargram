@@ -395,7 +395,10 @@ class OmarGramDaemon:
                 cid = int(chat_id)
                 mid = int(msg_id)
                 entity = await self.client.get_entity(cid)
-                await self.client.delete_messages(entity, [mid], revoke=True)
+                try:
+                    await self.client.delete_messages(entity, [mid], revoke=True)
+                except Exception:
+                    await self.client.delete_messages(entity, [mid])
                 return {"success": True, "chat_id": cid, "message_id": mid}
             except Exception as e:
                 return {"success": False, "error": str(e)}

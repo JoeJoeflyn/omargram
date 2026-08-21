@@ -3,7 +3,7 @@ import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 
-// Chat message stream with avatars for both sender and user, Omarchy theme sync, Thanos snap animation, and delete actions
+// Chat message stream with avatars for both sender and user, Omarchy theme sync, and per-message delete action
 Item {
   id: root
   property var p  // Panel root
@@ -76,13 +76,6 @@ Item {
           tooltipText: "Mark chat as read"
           foreground: p.foreground; hoverColor: Color.accent; fontFamily: p.fontFamily
           onClicked: p.markChatRead(p.selectedChat.id)
-        }
-
-        PanelActionButton {
-          iconText: "\uf2ed"
-          tooltipText: "Delete for both users"
-          foreground: p.foreground; hoverColor: p.urgent; fontFamily: p.fontFamily
-          onClicked: p.deleteChat(p.selectedChat.id)
         }
 
         PanelActionButton {
@@ -167,6 +160,17 @@ Item {
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
+    remove: Transition {
+      ParallelAnimation {
+        NumberAnimation { property: "opacity"; to: 0.0; duration: 250; easing.type: Easing.OutQuad }
+        NumberAnimation { property: "scale"; to: 0.75; duration: 250; easing.type: Easing.OutBack }
+      }
+    }
+
+    displaced: Transition {
+      NumberAnimation { properties: "y"; duration: 250; easing.type: Easing.OutQuad }
+    }
+
     Connections {
       target: p
       function onActiveMessagesChanged() {
@@ -176,36 +180,15 @@ Item {
       }
     }
 
-    // Message Row Delegate with Thanos Snap disintegration
+    // Message Row Delegate
     delegate: Item {
       id: msgRow
       required property var modelData
       required property int index
       readonly property bool isOut: modelData.out === true
-      property bool isSnapping: false
 
       width: msgListView.width
-      height: isSnapping ? 0 : (bubbleContentCol.implicitHeight + Style.space(16))
-      opacity: isSnapping ? 0.0 : 1.0
-      scale: isSnapping ? 0.8 : 1.0
-
-      Behavior on height { NumberAnimation { duration: 320; easing.type: Easing.InOutQuad } }
-      Behavior on opacity { NumberAnimation { duration: 260; easing.type: Easing.OutQuad } }
-      Behavior on scale { NumberAnimation { duration: 280; easing.type: Easing.OutBack } }
-
-      function triggerThanosSnap() {
-        msgRow.isSnapping = true
-        snapTimer.start()
-      }
-
-      Timer {
-        id: snapTimer
-        interval: 320
-        repeat: false
-        onTriggered: {
-          p.deleteMessage(p.selectedChat.id, modelData.id)
-        }
-      }
+      height: bubbleContentCol.implicitHeight + Style.space(16)
 
       MouseArea {
         id: msgMouseArea
@@ -351,7 +334,7 @@ Item {
             anchors.right: parent.right
             spacing: Style.space(5)
 
-            // Delete Message button on hover (Triggers Thanos Snap dissolve)
+            // Delete Message button on hover
             Text {
               visible: msgMouseArea.containsMouse
               text: "\uf2ed"
@@ -363,7 +346,9 @@ Item {
                 id: delMsgMouse
                 anchors.fill: parent; anchors.margins: -4
                 hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                onClicked: msgRow.triggerThanosSnap()
+                onClicked: {
+                  p.deleteMessage(p.selectedChat.id, modelData.id)
+                }
               }
             }
 
