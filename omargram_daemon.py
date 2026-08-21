@@ -254,6 +254,13 @@ class OmarGramDaemon:
             print(f"Error refreshing dialogs: {e}", file=sys.stderr)
             return self.dialogs_cache
 
+    async def download_media_bg(self, media, target_path):
+        try:
+            if not os.path.exists(target_path):
+                await self.client.download_media(media, file=target_path)
+        except Exception:
+            pass
+
     async def get_messages_for_chat(self, chat_id, limit=50):
         if not await self.client.is_user_authorized():
             return []
@@ -263,28 +270,34 @@ class OmarGramDaemon:
             messages = await self.client.get_messages(entity, limit=limit)
             
             read_outbox_max_id = 0
+            chat_title = getattr(entity, "first_name", "") or getattr(entity, "title", "User")
+            chat_avatar = self.cached_avatars.get(cid, "")
+            is_group_or_channel = isinstance(entity, (Chat, Channel))
+
             for d in self.dialogs_cache:
                 if d.get("id") == cid:
                     read_outbox_max_id = d.get("read_outbox_max_id", 0)
+                    if d.get("avatar"):
+                        chat_avatar = d["avatar"]
                     break
+
+            if not hasattr(self, 'cached_senders'):
+                self.cached_senders = {}
 
             result = []
             for m in reversed(messages):
-                sender_name = "You" if m.out else ""
-                sender_avatar = ""
-                sender_color = "#888888"
+                sender_name = "You" if m.out else chat_title
+                sender_avatar = chat_avatar if not m.out else ""
+                sender_color = get_avatar_color(sender_name)
 
-                if not m.out:
-                    try:
-                        sender = await m.get_sender()
-                        if sender:
-                            sender_name = getattr(sender, "first_name", "") or getattr(sender, "title", "User")
-                            sender_avatar = await self.get_chat_avatar(sender)
-                            sender_color = get_avatar_color(sender_name)
-                    except Exception:
+                if not m.out and is_group_or_channel and m.sender_id:
+                    if m.sender_id in self.cached_senders:
+                        cached = self.cached_senders[m.sender_id]
+                        sender_name = cached["name"]
+                        sender_avatar = cached["avatar"]
+                        sender_color = cached["color"]
+                    else:
                         sender_name = "User"
-                    if not sender_avatar and cid in self.cached_avatars:
-                        sender_avatar = self.cached_avatars[cid]
 
                 media_type = ""
                 media_path = ""
@@ -293,13 +306,10 @@ class OmarGramDaemon:
                     if isinstance(m.media, MessageMediaPhoto):
                         media_type = "photo"
                         photo_f = os.path.join(MEDIA_DIR, f"photo_{m.id}_{cid}.jpg")
-                        if not os.path.exists(photo_f):
-                            try:
-                                await self.client.download_media(m.media, file=photo_f)
-                            except Exception:
-                                pass
                         if os.path.exists(photo_f):
                             media_path = photo_f
+                        else:
+                            asyncio.create_task(self.download_media_bg(m.media, photo_f))
                     elif isinstance(m.media, MessageMediaDocument):
                         media_type = "document"
                     elif isinstance(m.media, MessageMediaWebPage) and isinstance(m.media.webpage, WebPage):
@@ -308,13 +318,10 @@ class OmarGramDaemon:
                         wp_photo = ""
                         if wp.photo:
                             wp_photo_f = os.path.join(MEDIA_DIR, f"webpage_{m.id}_{cid}.jpg")
-                            if not os.path.exists(wp_photo_f):
-                                try:
-                                    await self.client.download_media(wp.photo, file=wp_photo_f)
-                                except Exception:
-                                    pass
                             if os.path.exists(wp_photo_f):
                                 wp_photo = wp_photo_f
+                            else:
+                                asyncio.create_task(self.download_media_bg(wp.photo, wp_photo_f))
 
                         webpage_meta = {
                             "site_name": getattr(wp, "site_name", "") or "",

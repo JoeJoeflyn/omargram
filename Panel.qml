@@ -298,6 +298,8 @@ Panel {
     }
   }
 
+  property string _lastMsgDigest: ""
+
   Process {
     id: messagesProc
     stdout: StdioCollector {
@@ -307,7 +309,11 @@ Panel {
         try {
           var d = JSON.parse(text || "{}")
           if (d.success && d.messages) {
-            root.activeMessages = d.messages
+            var digest = JSON.stringify(d.messages)
+            if (root._lastMsgDigest !== digest) {
+              root._lastMsgDigest = digest
+              root.activeMessages = d.messages
+            }
           }
         } catch (e) {}
       }

@@ -162,10 +162,17 @@ Item {
 
     Connections {
       target: p
-      function onActiveMessagesChanged() {
+      function onSelectedChatChanged() {
         Qt.callLater(function() {
           msgListView.positionViewAtEnd()
         })
+      }
+      function onActiveMessagesChanged() {
+        if (msgListView.atYEnd || p.activeMessages.length <= 1) {
+          Qt.callLater(function() {
+            msgListView.positionViewAtEnd()
+          })
+        }
       }
     }
 
