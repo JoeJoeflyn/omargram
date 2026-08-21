@@ -238,17 +238,23 @@ Item {
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-    delegate: BorderSurface {
+    delegate: Item {
       id: chatRow
       required property var modelData
       required property int index
       readonly property bool isSelected: p.selectedChat && p.selectedChat.id === modelData.id
+      readonly property bool isHovered: rowMouse.containsMouse
 
       width: chatListView.width
       height: Style.space(56)
-      radius: Style.cornerRadius
-      color: isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : (rowMouse.containsMouse ? Style.hoverFillFor(p.foreground, Color.accent) : "transparent")
-      borderSpec: isSelected ? Border.flat(Color.accent, 1) : Border.none
+
+      Rectangle {
+        anchors.fill: parent
+        radius: Style.cornerRadius
+        color: chatRow.isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : (chatRow.isHovered ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.06) : "transparent")
+        border.color: chatRow.isSelected ? Color.accent : "transparent"
+        border.width: chatRow.isSelected ? 1 : 0
+      }
 
       MouseArea {
         id: rowMouse
