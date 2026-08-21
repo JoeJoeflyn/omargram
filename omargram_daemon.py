@@ -210,9 +210,24 @@ class OmarGramDaemon:
                             if not last_msg_text:
                                 last_msg_text = "📷 Photo"
                         elif isinstance(d.message.media, MessageMediaDocument):
-                            media_type = "document"
-                            if not last_msg_text:
-                                last_msg_text = "📄 Document"
+                            doc = getattr(d.message.media, "document", None)
+                            mime = getattr(doc, "mime_type", "") if doc else ""
+                            if "audio" in mime or "ogg" in mime:
+                                media_type = "voice"
+                                if not last_msg_text:
+                                    last_msg_text = "🎤 Voice message"
+                            elif "video" in mime:
+                                media_type = "video"
+                                if not last_msg_text:
+                                    last_msg_text = "🎬 Video"
+                            elif "webp" in mime:
+                                media_type = "sticker"
+                                if not last_msg_text:
+                                    last_msg_text = "🌟 Sticker"
+                            else:
+                                media_type = "document"
+                                if not last_msg_text:
+                                    last_msg_text = "📄 Document"
                     
                     dt = d.message.date
                     if dt:
@@ -331,7 +346,16 @@ class OmarGramDaemon:
                         else:
                             asyncio.create_task(self.download_media_bg(m.media, photo_f))
                     elif isinstance(m.media, MessageMediaDocument):
-                        media_type = "document"
+                        doc = getattr(m.media, "document", None)
+                        mime = getattr(doc, "mime_type", "") if doc else ""
+                        if "audio" in mime or "ogg" in mime:
+                            media_type = "voice"
+                        elif "video" in mime:
+                            media_type = "video"
+                        elif "webp" in mime:
+                            media_type = "sticker"
+                        else:
+                            media_type = "document"
                     elif isinstance(m.media, MessageMediaWebPage) and isinstance(m.media.webpage, WebPage):
                         media_type = "webpage"
                         wp = m.media.webpage
