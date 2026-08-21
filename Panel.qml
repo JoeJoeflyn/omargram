@@ -983,6 +983,7 @@ Panel {
 
                   Text {
                     text: modelData.title || "Chat"
+                    textFormat: Text.PlainText
                     color: root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.bodySmall
@@ -992,6 +993,7 @@ Panel {
                   }
                   Text {
                     text: modelData.username ? "@" + modelData.username : (modelData.is_channel ? "Channel" : (modelData.is_group ? "Group" : "User"))
+                    textFormat: Text.PlainText
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption

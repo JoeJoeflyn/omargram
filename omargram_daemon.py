@@ -28,11 +28,12 @@ PID_PATH = os.path.join(OMARGRAM_RUN_DIR, "daemon.pid")
 SESSION_PATH = os.path.join(CONFIG_DIR, "omargram.session")
 QR_PATH = os.path.join(CACHE_DIR, "login_qr.png")
 
-os.makedirs(CONFIG_DIR, mode=0o700, exist_ok=True)
-os.makedirs(CACHE_DIR, mode=0o700, exist_ok=True)
-os.makedirs(AVATARS_DIR, mode=0o700, exist_ok=True)
-os.makedirs(MEDIA_DIR, mode=0o700, exist_ok=True)
-os.makedirs(OMARGRAM_RUN_DIR, mode=0o700, exist_ok=True)
+for d in (CONFIG_DIR, CACHE_DIR, AVATARS_DIR, MEDIA_DIR, OMARGRAM_RUN_DIR):
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    try:
+        os.chmod(d, 0o700)
+    except Exception:
+        pass
 
 try:
     from telethon import TelegramClient, events, functions, types
@@ -163,6 +164,10 @@ class OmarGramDaemon:
 
             path = await self.client.download_profile_photo(entity, file=avatar_file, download_big=False)
             if path and os.path.exists(path):
+                try:
+                    os.chmod(path, 0o600)
+                except Exception:
+                    pass
                 self.cached_avatars[ent_id] = path
                 return path
         except Exception:
@@ -267,7 +272,12 @@ class OmarGramDaemon:
     async def download_media_bg(self, media, target_path):
         try:
             if not os.path.exists(target_path):
-                await self.client.download_media(media, file=target_path)
+                path = await self.client.download_media(media, file=target_path)
+                if path and os.path.exists(path):
+                    try:
+                        os.chmod(path, 0o600)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -671,6 +681,10 @@ class OmarGramDaemon:
                 self.qr_login_obj = await self.client.qr_login()
                 img = qrcode.make(self.qr_login_obj.url)
                 img.save(QR_PATH)
+                try:
+                    os.chmod(QR_PATH, 0o600)
+                except Exception:
+                    pass
                 asyncio.create_task(self.wait_for_qr())
                 return {"success": True, "qr_path": QR_PATH, "url": self.qr_login_obj.url}
             except Exception as e:

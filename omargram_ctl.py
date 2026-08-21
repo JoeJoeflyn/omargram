@@ -28,10 +28,72 @@ def is_daemon_running():
     except Exception:
         return False
 
+def get_proc_starttime(pid):
+    try:
+        with open(f"/proc/{pid}/stat", "r") as f:
+            fields = f.read().split(")")[1].split()
+            return int(fields[19])
+    except Exception:
+        return None
+
+def is_omargram_proc(pid, expected_starttime=None):
+    try:
+        if expected_starttime is not None:
+            st = get_proc_starttime(pid)
+            if st != expected_starttime:
+                return False
+        with open(f"/proc/{pid}/cmdline", "r") as f:
+            cmdline = f.read()
+            return "omargram_daemon.py" in cmdline
+    except Exception:
+        return False
+
+def stop_daemon():
+    # 1. Try graceful IPC stop
+    if is_daemon_running():
+        try:
+            send_daemon_cmd({"action": "stop"}, timeout=1.5)
+        except Exception:
+            pass
+    # 2. Check PID file and verify starttime + cmdline before sending signal
+    if os.path.exists(PID_PATH):
+        try:
+            with open(PID_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                pid = int(data.get("pid"))
+                expected_st = data.get("starttime")
+                if is_omargram_proc(pid, expected_st):
+                    import signal
+                    os.kill(pid, signal.SIGTERM)
+                    for _ in range(20):
+                        time.sleep(0.05)
+                        if not is_omargram_proc(pid, expected_st):
+                            break
+                    else:
+                        if is_omargram_proc(pid, expected_st):
+                            os.kill(pid, signal.SIGKILL)
+        except Exception:
+            pass
+        try:
+            if os.path.exists(PID_PATH):
+                os.unlink(PID_PATH)
+        except Exception:
+            pass
+        try:
+            if os.path.exists(SOCK_PATH):
+                os.unlink(SOCK_PATH)
+        except Exception:
+            pass
+    return {"success": True}
+
 def ensure_daemon_running():
     if is_daemon_running():
         return True
     os.makedirs(OMARGRAM_RUN_DIR, mode=0o700, exist_ok=True)
+    try:
+        os.chmod(OMARGRAM_RUN_DIR, 0o700)
+    except Exception:
+        pass
     daemon_script = get_daemon_script_path()
     try:
         subprocess.Popen(
@@ -190,7 +252,7 @@ def main():
     elif action == "logout":
         print(json.dumps(send_daemon_cmd({"action": "logout"})))
     elif action == "stop":
-        print(json.dumps(send_daemon_cmd({"action": "stop"})))
+        print(json.dumps(stop_daemon()))
     else:
         print(json.dumps({"success": False, "error": f"Unknown action: {action}"}))
 

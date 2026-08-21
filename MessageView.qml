@@ -204,6 +204,7 @@ Item {
         }
         Text {
           text: root.pinnedMessage ? (root.pinnedMessage.text || "Media") : ""
+          textFormat: Text.PlainText
           color: p.foreground
           font.family: p.fontFamily
           font.pixelSize: Style.font.caption * 0.85

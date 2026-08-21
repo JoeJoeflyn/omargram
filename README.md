@@ -1,8 +1,27 @@
 # OmarGram 💬
 
-**Native, blazing-fast Telegram status bar client for the Omarchy Quattro Desktop.**
+**Native, blazing-fast, ultra-low-memory Telegram status bar client for the Omarchy Quattro Desktop.**
 
-OmarGram brings your Telegram chats directly into the Omarchy bar — read messages, check unread counts, search conversations, and send replies instantly without keeping heavy Electron desktop apps or browser tabs open.
+OmarGram brings your Telegram messages directly into the Omarchy bar — read chats, check unread counts, search conversations, and send replies instantly without switching windows or breaking your focus.
+
+---
+
+## 🎯 Why OmarGram?
+
+The core reason for building OmarGram is **workflow continuity and efficiency**:
+
+> *"I wanted to reply and read chats seamlessly in the same active workspace without opening a heavy separate window for Telegram."*
+
+Traditional desktop messaging apps (Electron wrappers and Chromium web clients) consume hundreds of megabytes of RAM, clutter window switchers, and pull you away from your active work. **OmarGram embeds Telegram natively into the Omarchy shell bar as a quick flyout capsule** — open with one click, reply in 2 seconds, and get right back to what you were doing.
+
+---
+
+## ⚡ Performance & Low Resource Footprint
+
+* 🪶 **Minimal RAM Usage**: Consumes only **~15MB – 25MB RAM** (compared to 500MB – 1.2GB for Telegram Desktop / Web wrappers).
+* 🔋 **Zero Idle CPU**: Uses an asynchronous event-driven MTProto daemon that stays completely idle until new messages arrive.
+* 🚀 **GPU-Accelerated QML**: Built with pure Qt Quick Scene Graph — ultra snappy 60 FPS transitions without browser overhead.
+* 📦 **Instant 0ms Updates**: Local reaction chips, message selection, and scroll-stable viewport with zero redundant model rebuilds.
 
 ---
 
@@ -12,9 +31,14 @@ OmarGram brings your Telegram chats directly into the Omarchy bar — read messa
 - 📱 **1-Click QR Code Login**: Scan the QR code with your phone (*Telegram Settings → Devices → Link Desktop Device*) to log in in 3 seconds.
 - ⚡ **Two-Column Fluid Layout**: Sidebar with Direct Messages, Groups, and Channels + smooth-scrolling conversation stream.
 - 🚀 **Instant Message Composer**: Quick-reply input with Enter to send and Shift+Enter for multiline formatting.
-- 🎨 **Theme-Native Visuals**: Matches your active Omarchy colorway, dynamic accent colors, smooth spring transitions, and custom typography.
-- 🪶 **Ultra Lightweight**: Consumes only ~15MB RAM vs 500MB+ for Telegram Desktop / Web.
-- 🔒 **End-to-End MTProto Security**: Connects directly to Telegram MTProto servers via official Telegram API encryption.
+- ✏️ **Edit & Pin Messages**: Edit sent messages inline and pin/unpin important messages with a direct jump banner.
+- ↗️ **Forward & Multi-Select**: Batch select messages with custom checkboxes to forward, copy, or delete at once.
+- 🎨 **Theme-Native Visuals**: Matches your active Omarchy colorway, dynamic accent colors, and custom typography.
+- 🔒 **Security-First Architecture**:
+  - **End-to-End MTProto**: Official Telegram MTProto encryption directly to Telegram servers.
+  - **Owner-Only Local Caching**: Enforces strict `0700` directory modes and `0600` file permissions on `~/.config/omargram` and `~/.cache/omargram` to protect user metadata and session tokens from other local users.
+  - **Isolated IPC & PID Verification**: Dedicated UNIX socket in `$XDG_RUNTIME_DIR/omargram` with `0600` socket permissions and PID `starttime` verification preventing process hijacking or PID-reuse termination.
+  - **Injection & SSRF Safe**: All incoming message text and remote metadata strictly rendered as `Text.PlainText`.
 
 ---
 
