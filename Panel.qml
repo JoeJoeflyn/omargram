@@ -57,6 +57,7 @@ Panel {
   property var pickerFiles: []
   property string pickerCurrentPath: ""
   property string pickerParentPath: ""
+  property bool reopenAfterPick: false
 
   property string qrPath: ""
   property double qrTimestamp: 0
@@ -559,6 +560,8 @@ Panel {
 
   function openNativeFilePicker() {
     closeFilePicker()
+    reopenAfterPick = true
+    opened = false
     pickFileProc.running = false
     pickFileProc.running = true
   }
@@ -797,6 +800,10 @@ Panel {
             root.attachFile(d.file_path)
           }
         } catch (e) {}
+        if (root.reopenAfterPick) {
+          root.reopenAfterPick = false
+          root.openFromHotkey()
+        }
       }
     }
   }
@@ -1433,6 +1440,51 @@ Panel {
                     root.closeFilePicker()
                   }
                 }
+              }
+            }
+          }
+
+          // Bottom Bar (System Dialog Option)
+          Row {
+            width: parent.width
+            height: Style.space(24)
+
+            Item { width: Style.space(1); height: parent.height }
+
+            BorderSurface {
+              anchors.right: parent.right
+              height: Style.space(24)
+              radius: Style.space(4)
+              color: nativePickM.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+              borderSpec: Border.none
+              implicitWidth: nativePickRow.implicitWidth + Style.space(12)
+
+              Row {
+                id: nativePickRow
+                anchors.centerIn: parent
+                spacing: Style.space(4)
+
+                Text {
+                  text: "\uf07c"
+                  color: Color.accent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+
+                Text {
+                  text: "Open System File Chooser..."
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+              }
+
+              MouseArea {
+                id: nativePickM
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.openNativeFilePicker()
               }
             }
           }
