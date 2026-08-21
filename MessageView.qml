@@ -179,6 +179,12 @@ Item {
       width: msgListView.width
       height: bubbleContentCol.implicitHeight + Style.space(16)
 
+      MouseArea {
+        id: msgMouseArea
+        anchors.fill: parent
+        hoverEnabled: true
+      }
+
       // 1. Incoming Sender Avatar (Positioned left of the bubble)
       Item {
         id: leftAvatar
@@ -315,7 +321,23 @@ Item {
           // Timestamp and status row
           Row {
             anchors.right: parent.right
-            spacing: Style.space(4)
+            spacing: Style.space(5)
+
+            // Delete Message button on hover
+            Text {
+              visible: msgMouseArea.containsMouse
+              text: "\uf2ed"
+              color: delMsgMouse.containsMouse ? p.urgent : (msgRow.isOut ? Qt.rgba(1, 1, 1, 0.75) : p.dim)
+              font.family: p.fontFamily
+              font.pixelSize: Style.space(9)
+
+              MouseArea {
+                id: delMsgMouse
+                anchors.fill: parent; anchors.margins: -4
+                hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                onClicked: p.deleteMessage(p.selectedChat.id, modelData.id)
+              }
+            }
 
             Text {
               textFormat: Text.PlainText

@@ -150,6 +150,16 @@ Panel {
     }
   }
 
+  function deleteMessage(chatId, messageId) {
+    if (!chatId || !messageId) return
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "delete_message", String(chatId), String(messageId)]
+    actionProc.running = true
+
+    // Optimistically remove message from list
+    activeMessages = activeMessages.filter(function(m) { return m.id !== messageId })
+  }
+
   function loadMessages(chatId) {
     if (!chatId) return
     loadingMessages = true

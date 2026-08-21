@@ -386,6 +386,20 @@ class OmarGramDaemon:
             except Exception as e:
                 return {"success": False, "error": str(e)}
 
+        elif action == "delete_message":
+            chat_id = cmd_dict.get("chat_id")
+            msg_id = cmd_dict.get("message_id")
+            if not chat_id or not msg_id:
+                return {"success": False, "error": "chat_id and message_id required"}
+            try:
+                cid = int(chat_id)
+                mid = int(msg_id)
+                entity = await self.client.get_entity(cid)
+                await self.client.delete_messages(entity, [mid], revoke=True)
+                return {"success": True, "chat_id": cid, "message_id": mid}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
         elif action == "dialogs":
             lim = int(cmd_dict.get("limit", 40))
             chats = await self.refresh_dialogs_cache(lim)

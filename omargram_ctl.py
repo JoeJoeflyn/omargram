@@ -112,6 +112,13 @@ def main():
             sys.exit(1)
         chat_id = sys.argv[2]
         print(json.dumps(send_daemon_cmd({"action": "delete_chat", "chat_id": chat_id})))
+    elif action == "delete_message":
+        if len(sys.argv) < 4:
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py delete_message <chat_id> <message_id>"}))
+            sys.exit(1)
+        chat_id = sys.argv[2]
+        msg_id = sys.argv[3]
+        print(json.dumps(send_daemon_cmd({"action": "delete_message", "chat_id": chat_id, "message_id": msg_id})))
     elif action == "start_qr":
         print(json.dumps(send_daemon_cmd({"action": "start_qr"})))
     elif action == "send_code":
