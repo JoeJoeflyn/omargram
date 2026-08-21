@@ -160,15 +160,8 @@ Item {
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-    remove: Transition {
-      ParallelAnimation {
-        NumberAnimation { property: "opacity"; to: 0.0; duration: 200; easing.type: Easing.OutQuad }
-        NumberAnimation { property: "scale"; to: 0.8; duration: 200; easing.type: Easing.OutQuad }
-      }
-    }
-
     displaced: Transition {
-      NumberAnimation { properties: "y"; duration: 250; easing.type: Easing.OutQuad }
+      NumberAnimation { properties: "y"; duration: 380; easing.type: Easing.OutQuad }
     }
 
     Connections {
@@ -187,15 +180,25 @@ Item {
       required property int index
       readonly property bool isOut: modelData.out === true
       property bool isHovered: bubbleMouse.containsMouse || delBtnMouse.containsMouse
+      property bool isSnapping: false
 
       width: msgListView.width
-      height: bubbleContentCol.implicitHeight + Style.space(16)
+      height: isSnapping ? 0 : (bubbleContentCol.implicitHeight + Style.space(16))
+      opacity: isSnapping ? 0.0 : 1.0
+
+      Behavior on height { NumberAnimation { duration: 450; easing.type: Easing.InOutQuad } }
+      Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
 
       function snapAndRemove() {
+        if (msgRow.isSnapping) return
+        msgRow.isSnapping = true
+        
         var mapped = bubbleSurface.mapToItem(thanosOverlay, 0, 0)
-        var col = msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.75)
-        thanosOverlay.disintegrate(mapped.x, mapped.y, bubbleSurface.width, bubbleSurface.height, col)
-        p.deleteMessage(p.selectedChat.id, modelData.id)
+        var col = msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.85)
+        
+        thanosOverlay.disintegrate(mapped.x, mapped.y, bubbleSurface.width, bubbleSurface.height, col, function() {
+          p.deleteMessage(p.selectedChat.id, modelData.id)
+        })
       }
 
       // 1. Incoming Sender Avatar (Positioned left of the bubble)
@@ -207,6 +210,7 @@ Item {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Style.space(8)
         width: Style.space(28); height: Style.space(28)
+        opacity: msgRow.isSnapping ? 0.0 : 1.0
 
         BorderSurface {
           anchors.fill: parent
@@ -245,6 +249,7 @@ Item {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Style.space(8)
         width: Style.space(28); height: Style.space(28)
+        opacity: msgRow.isSnapping ? 0.0 : 1.0
 
         BorderSurface {
           anchors.fill: parent
@@ -347,7 +352,7 @@ Item {
             Item {
               width: Style.space(16)
               height: Style.space(14)
-              visible: msgRow.isHovered
+              visible: msgRow.isHovered && !msgRow.isSnapping
 
               Text {
                 anchors.centerIn: parent
@@ -392,7 +397,7 @@ Item {
     }
   }
 
-  // 4. Global Thanos Snap Particle Overlay (enabled: false to NEVER intercept clicks)
+  // 4. Global Thanos Snap Particle Overlay (Dense, vibrant ash cloud)
   Item {
     id: thanosOverlay
     anchors.fill: msgListView
@@ -401,6 +406,7 @@ Item {
     enabled: false
     property var particles: []
     property bool running: false
+    property var onFinishedCallback: null
 
     Canvas {
       id: particleCanvas
@@ -434,8 +440,8 @@ Item {
           if (pt.alpha > 0.01) {
             pt.x += pt.vx
             pt.y += pt.vy
-            pt.vx += 0.06 // wind force to right
-            pt.vy -= 0.03 // ash lift
+            pt.vx += 0.08 // wind force to right
+            pt.vy -= 0.04 // thermal lift
             pt.alpha -= pt.decay
             if (pt.alpha > 0.01) aliveCount++
           }
@@ -449,21 +455,37 @@ Item {
       }
     }
 
-    function disintegrate(startX, startY, w, h, baseColor) {
+    Timer {
+      id: completeTimer
+      interval: 480
+      repeat: false
+      onTriggered: {
+        if (typeof thanosOverlay.onFinishedCallback === "function") {
+          var cb = thanosOverlay.onFinishedCallback
+          thanosOverlay.onFinishedCallback = null
+          cb()
+        }
+      }
+    }
+
+    function disintegrate(startX, startY, w, h, baseColor, callback) {
+      onFinishedCallback = callback
+      completeTimer.start()
+
       var col = Color.accent
       if (baseColor) col = baseColor
       var r = col.r, g = col.g, b = col.b
 
       var newPts = []
-      var count = Math.min(180, Math.max(80, Math.floor((w * h) / 100)))
+      var count = Math.min(260, Math.max(140, Math.floor((w * h) / 70)))
       for (var i = 0; i < count; i++) {
         var px = startX + Math.random() * w
         var py = startY + Math.random() * h
         var progress = (px - startX) / (w || 1)
-        var vx = 0.6 + Math.random() * 3.5 + progress * 2.2
-        var vy = -(Math.random() * 3.8 + 1.0)
-        var size = Math.random() < 0.25 ? 3 : (Math.random() < 0.65 ? 2 : 1.2)
-        var decay = 0.016 + Math.random() * 0.024
+        var vx = 0.8 + Math.random() * 4.0 + progress * 2.5
+        var vy = -(Math.random() * 4.2 + 1.2)
+        var size = Math.random() < 0.3 ? 3.5 : (Math.random() < 0.7 ? 2.5 : 1.5)
+        var decay = 0.014 + Math.random() * 0.02
 
         newPts.push({
           x: px, y: py,
