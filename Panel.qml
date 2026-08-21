@@ -222,8 +222,27 @@ Panel {
 
   function sendReaction(chatId, messageId, emoticon) {
     if (!chatId || !messageId) return
+
+    // Find if user already has an active chosen reaction on this message
+    var currentChosen = null
+    for (var i = 0; i < activeMessages.length; i++) {
+      if (activeMessages[i].id === messageId) {
+        var rx = activeMessages[i].reactions || []
+        for (var k = 0; k < rx.length; k++) {
+          if (rx[k].chosen) {
+            currentChosen = rx[k].emoticon
+            break
+          }
+        }
+        break
+      }
+    }
+
+    var isRemoving = (emoticon === "clear" || emoticon === "remove" || currentChosen === emoticon)
+    var targetEmoticon = isRemoving ? "clear" : (emoticon || "👍")
+
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "reaction", String(chatId), String(messageId), emoticon || "👍"]
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "reaction", String(chatId), String(messageId), targetEmoticon]
     actionProc.running = true
 
     // Optimistically update message reaction in activeMessages and cache
@@ -231,17 +250,25 @@ Panel {
     for (var i = 0; i < activeMessages.length; i++) {
       var m = Object.assign({}, activeMessages[i])
       if (m.id === messageId) {
-        var rList = (m.reactions || []).slice()
-        var found = false
-        for (var j = 0; j < rList.length; j++) {
-          if (rList[j].emoticon === emoticon) {
-            rList[j] = Object.assign({}, rList[j], { count: rList[j].count + 1, chosen: true })
-            found = true
-            break
+        var rList = []
+        var rawList = m.reactions || []
+        for (var j = 0; j < rawList.length; j++) {
+          var item = Object.assign({}, rawList[j])
+          if (item.chosen) {
+            item.count = Math.max(0, item.count - 1)
+            item.chosen = false
+          }
+          if (item.emoticon === targetEmoticon && !isRemoving) {
+            item.count += 1
+            item.chosen = true
+          }
+          if (item.count > 0) {
+            rList.push(item)
           }
         }
-        if (!found) {
-          rList.push({ emoticon: emoticon, count: 1, chosen: true })
+        // If adding a new emoji not currently in the reaction list
+        if (!isRemoving && targetEmoticon && targetEmoticon !== "clear" && !rList.some(function(r) { return r.emoticon === targetEmoticon })) {
+          rList.push({ emoticon: targetEmoticon, count: 1, chosen: true })
         }
         m.reactions = rList
       }

@@ -194,9 +194,12 @@ Item {
         })
       }
       function onActiveMessagesChanged() {
-        if (!msgListView.moving) {
+        // Preserve scroll position when reading history; never jump on reaction or background refresh!
+        if (!msgListView.moving && msgListView.atYBeginning) {
           Qt.callLater(function() {
-            msgListView.positionViewAtBeginning()
+            if (msgListView.atYBeginning) {
+              msgListView.positionViewAtBeginning()
+            }
           })
         }
       }
@@ -685,7 +688,14 @@ Item {
               model: ["👍", "❤️", "🔥", "😂", "👏", "🎉"]
               delegate: Item {
                 required property string modelData
+                readonly property bool isChosen: msgContextMenu.targetMsg && msgContextMenu.targetMsg.reactions && msgContextMenu.targetMsg.reactions.some(function(r) { return r.emoticon === modelData && r.chosen })
                 width: Style.space(24); height: Style.space(24)
+
+                Rectangle {
+                  anchors.fill: parent
+                  radius: Style.space(4)
+                  color: isChosen ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.35) : (emojiM.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.1) : "transparent")
+                }
 
                 Text {
                   anchors.centerIn: parent
@@ -708,6 +718,50 @@ Item {
                   }
                 }
               }
+            }
+          }
+        }
+
+        // Remove Reaction (Shown when message already has a chosen reaction)
+        Rectangle {
+          visible: msgContextMenu.targetMsg && msgContextMenu.targetMsg.reactions && msgContextMenu.targetMsg.reactions.some(function(r) { return r.chosen === true })
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: rmReactM.containsMouse ? Qt.rgba(p.urgent.r, p.urgent.g, p.urgent.b, 0.12) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf00d"
+              color: p.urgent
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Remove Reaction"
+              color: p.urgent
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          MouseArea {
+            id: rmReactM
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (msgContextMenu.targetMsg) {
+                p.sendReaction(p.selectedChat.id, msgContextMenu.targetMsg.id, "clear")
+              }
+              msgContextMenu.hide()
             }
           }
         }

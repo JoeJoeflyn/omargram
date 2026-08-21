@@ -138,6 +138,8 @@ def main():
         chat_id = sys.argv[2]
         msg_id = sys.argv[3]
         emoticon = sys.argv[4] if len(sys.argv) > 4 else "👍"
+        if emoticon.lower() in ("clear", "remove", "none", "rm", "delete", "empty"):
+            emoticon = ""
         print(json.dumps(send_daemon_cmd({"action": "send_reaction", "chat_id": chat_id, "message_id": msg_id, "emoticon": emoticon})))
     elif action == "start_qr":
         print(json.dumps(send_daemon_cmd({"action": "start_qr"})))
