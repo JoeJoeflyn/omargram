@@ -387,25 +387,52 @@ Item {
               }
             }
 
-            Text {
+            Row {
               anchors.left: parent.left
               anchors.right: badgePill.visible ? badgePill.left : parent.right
               anchors.rightMargin: badgePill.visible ? Style.space(4) : 0
               anchors.verticalCenter: parent.verticalCenter
-              textFormat: Text.PlainText
-              maximumLineCount: 1
-              elide: Text.ElideRight
-              text: {
-                if (!modelData.last_message) return ""
-                var raw = modelData.last_message.text || ""
-                var singleLine = raw.replace(/[\r\n]+/g, " ").trim()
-                var prefix = modelData.last_message.out ? "✓ " : ""
-                return prefix + (singleLine || (modelData.last_message.media_type ? "📷 Media" : ""))
+              spacing: Style.space(3)
+
+              // Outgoing Status Checks (✓ / ✓✓)
+              Row {
+                visible: modelData.last_message && modelData.last_message.out === true
+                spacing: -3
+                anchors.verticalCenter: parent.verticalCenter
+
+                Text {
+                  text: "\uf00c"
+                  color: (modelData.last_message && (modelData.last_message.status === "read" || modelData.last_message.is_read)) ? Color.accent : p.dim
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.space(8)
+                }
+
+                Text {
+                  visible: modelData.last_message && (modelData.last_message.status === "read" || modelData.last_message.is_read)
+                  text: "\uf00c"
+                  color: Color.accent
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.space(8)
+                }
               }
-              color: modelData.unread_count > 0 ? p.foreground : p.dim
-              font.family: p.fontFamily
-              font.pixelSize: Style.font.caption * 0.88
-              font.bold: modelData.unread_count > 0
+
+              // Last message snippet text
+              Text {
+                width: parent.width - (modelData.last_message && modelData.last_message.out ? Style.space(16) : 0)
+                textFormat: Text.PlainText
+                maximumLineCount: 1
+                elide: Text.ElideRight
+                text: {
+                  if (!modelData.last_message) return ""
+                  var raw = modelData.last_message.text || ""
+                  var singleLine = raw.replace(/[\r\n]+/g, " ").trim()
+                  return singleLine || (modelData.last_message.media_type ? "📷 Media" : "")
+                }
+                color: modelData.unread_count > 0 ? p.foreground : p.dim
+                font.family: p.fontFamily
+                font.pixelSize: Style.font.caption * 0.88
+                font.bold: modelData.unread_count > 0
+              }
             }
           }
         }

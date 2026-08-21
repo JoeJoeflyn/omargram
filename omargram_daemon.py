@@ -224,6 +224,11 @@ class OmarGramDaemon:
                         online = True
 
                 read_outbox_max_id = getattr(d.dialog, 'read_outbox_max_id', 0) if hasattr(d, 'dialog') else 0
+                last_msg_is_read = False
+                last_msg_status = ""
+                if d.message and d.message.out:
+                    last_msg_is_read = bool(read_outbox_max_id > 0 and d.message.id <= read_outbox_max_id)
+                    last_msg_status = "read" if last_msg_is_read else "sent"
 
                 result.append({
                     "id": d.id,
@@ -243,6 +248,8 @@ class OmarGramDaemon:
                         "time": last_msg_time,
                         "date": last_msg_date,
                         "out": last_msg_out,
+                        "is_read": last_msg_is_read,
+                        "status": last_msg_status,
                         "media_type": media_type
                     }
                 })

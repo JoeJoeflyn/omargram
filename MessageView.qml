@@ -160,15 +160,17 @@ Item {
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
+    property var lastChatId: null
+
     Connections {
       target: p
-      function onSelectedChatChanged() {
-        Qt.callLater(function() {
-          msgListView.positionViewAtEnd()
-        })
-      }
       function onActiveMessagesChanged() {
-        if (msgListView.atYEnd || p.activeMessages.length <= 1) {
+        if (msgListView.lastChatId !== (p.selectedChat ? p.selectedChat.id : null)) {
+          msgListView.lastChatId = (p.selectedChat ? p.selectedChat.id : null)
+          Qt.callLater(function() {
+            msgListView.positionViewAtEnd()
+          })
+        } else if (msgListView.atYEnd || p.activeMessages.length <= 1) {
           Qt.callLater(function() {
             msgListView.positionViewAtEnd()
           })
@@ -432,11 +434,12 @@ Item {
             anchors.right: parent.right
             spacing: Style.space(6)
 
-            // Delete Message Button (Comfortable, instant, zero flicker)
+            // Delete Message Button (Static footprint with opacity fade = 0 layout resizing on hover)
             Item {
               width: Style.space(16)
               height: Style.space(14)
-              visible: msgRow.isHovered && !msgRow.isSnapping
+              opacity: (msgRow.isHovered && !msgRow.isSnapping) ? 1.0 : 0.0
+              anchors.verticalCenter: parent.verticalCenter
 
               Text {
                 anchors.centerIn: parent
