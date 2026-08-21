@@ -233,7 +233,11 @@ Item {
     anchors.right: parent.right
     clip: true
     spacing: Style.space(2)
-    boundsBehavior: Flickable.StopAtBounds
+    boundsBehavior: Flickable.DragOverBounds
+    cacheBuffer: 1500
+    pixelAligned: true
+    flickDeceleration: 1400
+    maximumFlickVelocity: 4500
     model: p.filteredChats
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }

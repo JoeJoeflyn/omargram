@@ -173,11 +173,34 @@ Item {
     anchors.right: parent.right
     clip: true
     spacing: Style.space(8)
-    boundsBehavior: Flickable.StopAtBounds
+    boundsBehavior: Flickable.DragOverBounds
     verticalLayoutDirection: ListView.BottomToTop
     model: p.activeMessages
 
+    cacheBuffer: 2500
+    pixelAligned: true
+    flickDeceleration: 1400
+    maximumFlickVelocity: 4500
+
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+    Connections {
+      target: p
+      function onSelectedChatChanged() {
+        msgListView.contentY = 0
+        Qt.callLater(function() {
+          msgListView.contentY = 0
+          msgListView.positionViewAtBeginning()
+        })
+      }
+      function onActiveMessagesChanged() {
+        if (!msgListView.moving) {
+          Qt.callLater(function() {
+            msgListView.positionViewAtBeginning()
+          })
+        }
+      }
+    }
 
     // Message Row Delegate
     delegate: Item {
