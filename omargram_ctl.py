@@ -6,6 +6,7 @@ import json
 import time
 import socket
 import subprocess
+import shutil
 
 RUN_DIR = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 OMARGRAM_RUN_DIR = os.path.join(RUN_DIR, "omargram")
@@ -263,6 +264,70 @@ def browse_directory(dir_path="pictures", limit=80):
         "entries": entries[:limit]
     }
 
+def search_files(query, root_dir="~", limit=60):
+    query = query.strip()
+    home = os.path.expanduser("~")
+    
+    if root_dir == "pictures":
+        root = os.path.join(home, "Pictures")
+    elif root_dir == "downloads":
+        root = os.path.join(home, "Downloads")
+    elif root_dir == "home" or root_dir == "~":
+        root = home
+    else:
+        root = os.path.expanduser(root_dir)
+    
+    if not os.path.exists(root):
+        root = home
+
+    if not query:
+        return browse_directory(root_dir, limit)
+    
+    entries = []
+    has_fd = shutil.which("fd") is not None
+    
+    if has_fd:
+        try:
+            cmd = [
+                "fd", "--type", "f",
+                "--max-results", str(limit * 2),
+                query,
+                root
+            ]
+            out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=2.0).decode("utf-8")
+            paths = [p.strip() for p in out.splitlines() if p.strip()]
+        except Exception:
+            paths = []
+    else:
+        paths = []
+    
+    for p in paths:
+        try:
+            st = os.stat(p)
+            ext = os.path.splitext(p)[1].lower()
+            is_img = ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg")
+            rel_dir = os.path.dirname(p).replace(home, "~")
+            entries.append({
+                "name": os.path.basename(p),
+                "path": p,
+                "dir": rel_dir,
+                "is_dir": False,
+                "is_image": is_img,
+                "size": st.st_size,
+                "mtime": int(st.st_mtime),
+                "preview": "file://" + p if is_img else ""
+            })
+        except Exception:
+            pass
+    
+    entries.sort(key=lambda x: (not x["is_image"], -x["mtime"]))
+    return {
+        "success": True,
+        "query": query,
+        "root": root,
+        "entries": entries[:limit]
+    }
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps(send_daemon_cmd({"action": "status"})))
@@ -272,6 +337,10 @@ def main():
 
     if action == "status":
         print(json.dumps(send_daemon_cmd({"action": "status"})))
+    elif action in ("search_files", "find", "search"):
+        query = sys.argv[2] if len(sys.argv) > 2 else ""
+        root_dir = sys.argv[3] if len(sys.argv) > 3 else "~"
+        print(json.dumps(search_files(query, root_dir)))
     elif action in ("list_files", "browse", "browse_files"):
         folder = sys.argv[2] if len(sys.argv) > 2 else "pictures"
         print(json.dumps(browse_directory(folder)))

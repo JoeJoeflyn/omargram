@@ -57,6 +57,7 @@ Panel {
   property var pickerFiles: []
   property string pickerCurrentPath: ""
   property string pickerParentPath: ""
+  property string pickerSearchQuery: ""
   property bool reopenAfterPick: false
 
   property string qrPath: ""
@@ -543,19 +544,33 @@ Panel {
 
   function openFilePicker(tab) {
     filePickerTab = tab || "pictures"
+    pickerSearchQuery = ""
     filePickerOpen = true
     loadPickerFiles(filePickerTab)
   }
 
   function loadPickerFiles(tab) {
     filePickerTab = tab
+    pickerSearchQuery = ""
     pickerFilesProc.running = false
     pickerFilesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "list_files", tab]
     pickerFilesProc.running = true
   }
 
+  function searchPickerFiles(query) {
+    pickerSearchQuery = query
+    if (!query || query.trim() === "") {
+      loadPickerFiles(filePickerTab)
+      return
+    }
+    searchFilesProc.running = false
+    searchFilesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "search", query.trim(), filePickerTab]
+    searchFilesProc.running = true
+  }
+
   function closeFilePicker() {
     filePickerOpen = false
+    pickerSearchQuery = ""
   }
 
   function openNativeFilePicker() {
@@ -819,6 +834,21 @@ Panel {
             root.pickerFiles = d.entries
             root.pickerCurrentPath = d.current_path || ""
             root.pickerParentPath = d.parent_path || ""
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
+  Process {
+    id: searchFilesProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(text || "{}")
+          if (d.success && d.entries) {
+            root.pickerFiles = d.entries
           }
         } catch (e) {}
       }
@@ -1196,8 +1226,8 @@ Panel {
       }
 
       BorderSurface {
-        width: Style.space(500)
-        height: Style.space(480)
+        width: Style.space(520)
+        height: Style.space(500)
         anchors.centerIn: parent
         radius: Style.space(12)
         color: root.surface
@@ -1212,7 +1242,7 @@ Panel {
           Row {
             width: parent.width
             Text {
-              text: "Browse Files & Photos"
+              text: "Attach Media & Files"
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.title
@@ -1241,7 +1271,82 @@ Panel {
             }
           }
 
-          // Shortcuts / Quick Locations
+          // Live Search Bar
+          BorderSurface {
+            width: parent.width
+            height: Style.space(34)
+            radius: Style.space(6)
+            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
+            borderSpec: Border.controlSpec(pickerSearchInput.activeFocus ? "focused" : "normal", root.foreground, Color.accent)
+
+            Row {
+              anchors.fill: parent
+              anchors.leftMargin: Style.space(8)
+              anchors.rightMargin: Style.space(8)
+              spacing: Style.space(6)
+
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "\uf002"
+                color: Color.accent
+                font.family: root.fontFamily
+                font.pixelSize: Style.space(12)
+              }
+
+              TextInput {
+                id: pickerSearchInput
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - Style.space(48)
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                selectByMouse: true
+                clip: true
+
+                Text {
+                  visible: !pickerSearchInput.text && !pickerSearchInput.activeFocus
+                  text: "Type to search files (e.g. screenshot, image, pdf)..."
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
+
+                onTextChanged: {
+                  searchDebounceTimer.restart()
+                }
+
+                Timer {
+                  id: searchDebounceTimer
+                  interval: 60
+                  repeat: false
+                  onTriggered: root.searchPickerFiles(pickerSearchInput.text)
+                }
+              }
+
+              Text {
+                visible: pickerSearchInput.text !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                text: "\uf00d"
+                color: clearSearchM.containsMouse ? root.danger : root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.space(11)
+
+                MouseArea {
+                  id: clearSearchM
+                  anchors.fill: parent
+                  anchors.margins: -4
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: {
+                    pickerSearchInput.text = ""
+                    root.loadPickerFiles(root.filePickerTab)
+                  }
+                }
+              }
+            }
+          }
+
+          // Scope / Shortcuts Bar
           Row {
             width: parent.width
             spacing: Style.space(6)
@@ -1257,8 +1362,8 @@ Panel {
                 required property var modelData
                 height: Style.space(26)
                 radius: Style.space(6)
-                color: tabM.containsMouse ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.18) : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
-                borderSpec: Border.none
+                color: root.filePickerTab === modelData.id ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : (tabM.containsMouse ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.1) : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.04))
+                borderSpec: root.filePickerTab === modelData.id ? Border.controlSpec("active", root.foreground, Color.accent) : Border.none
                 implicitWidth: tabRow.implicitWidth + Style.space(14)
 
                 Row {
@@ -1268,16 +1373,17 @@ Panel {
 
                   Text {
                     text: modelData.icon
-                    color: Color.accent
+                    color: root.filePickerTab === modelData.id ? Color.accent : root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption * 0.9
                   }
 
                   Text {
                     text: modelData.label
-                    color: root.foreground
+                    color: root.filePickerTab === modelData.id ? root.foreground : root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption * 0.9
+                    font.bold: root.filePickerTab === modelData.id
                   }
                 }
 
@@ -1286,18 +1392,25 @@ Panel {
                   anchors.fill: parent
                   hoverEnabled: true
                   cursorShape: Qt.PointingHandCursor
-                  onClicked: root.loadPickerFiles(modelData.id)
+                  onClicked: {
+                    root.filePickerTab = modelData.id
+                    if (pickerSearchInput.text.trim() !== "") {
+                      root.searchPickerFiles(pickerSearchInput.text)
+                    } else {
+                      root.loadPickerFiles(modelData.id)
+                    }
+                  }
                 }
               }
             }
           }
 
-          // Path & Up Navigation Bar
+          // Path / Search Status Bar
           BorderSurface {
             width: parent.width
-            height: Style.space(30)
+            height: Style.space(28)
             radius: Style.space(6)
-            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.05)
+            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.04)
             borderSpec: Border.none
 
             Row {
@@ -1306,11 +1419,11 @@ Panel {
               anchors.rightMargin: Style.space(6)
               spacing: Style.space(6)
 
-              // Up button
+              // Up button (when browsing)
               BorderSurface {
-                visible: root.pickerParentPath !== ""
+                visible: pickerSearchInput.text === "" && root.pickerParentPath !== ""
                 anchors.verticalCenter: parent.verticalCenter
-                width: Style.space(22); height: Style.space(22)
+                width: Style.space(20); height: Style.space(20)
                 radius: Style.space(4)
                 color: upBtnM.containsMouse ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : "transparent"
                 borderSpec: Border.none
@@ -1320,7 +1433,7 @@ Panel {
                   text: "\uf062"
                   color: Color.accent
                   font.family: root.fontFamily
-                  font.pixelSize: Style.space(11)
+                  font.pixelSize: Style.space(10)
                 }
 
                 MouseArea {
@@ -1336,12 +1449,12 @@ Panel {
 
               Text {
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - (root.pickerParentPath ? Style.space(30) : 0)
-                text: root.pickerCurrentPath.replace(/^\/home\/[^\/]+/, "~")
+                width: parent.width - (upBtnM.parent.visible ? Style.space(28) : 0)
+                text: pickerSearchInput.text !== "" ? ("Search results for \"" + pickerSearchInput.text + "\" (" + (root.pickerFiles ? root.pickerFiles.length : 0) + " matches)") : root.pickerCurrentPath.replace(/^\/home\/[^\/]+/, "~")
                 textFormat: Text.PlainText
-                color: root.dim
+                color: pickerSearchInput.text !== "" ? Color.accent : root.dim
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
+                font.pixelSize: Style.font.caption * 0.95
                 elide: Text.ElideMiddle
               }
             }
@@ -1351,7 +1464,7 @@ Panel {
           ListView {
             id: pickerList
             width: parent.width
-            height: Style.space(320)
+            height: Style.space(310)
             clip: true
             spacing: Style.space(4)
             model: root.pickerFiles
@@ -1364,7 +1477,7 @@ Panel {
               height: Style.space(44)
               radius: Style.space(6)
               color: fileRowM.containsMouse ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.15) : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.03)
-              borderSpec: Border.none
+              borderSpec: fileRowM.containsMouse ? Border.flat(Color.accent, 1) : Border.none
 
               Row {
                 anchors.fill: parent
@@ -1416,7 +1529,7 @@ Panel {
                   }
 
                   Text {
-                    text: modelData.is_dir ? "Folder" : (modelData.size ? ((modelData.size / 1024 > 1024) ? ((modelData.size / (1024*1024)).toFixed(1) + " MB") : (Math.round(modelData.size / 1024) + " KB")) : "")
+                    text: (modelData.is_dir ? "Folder" : ((modelData.dir ? (modelData.dir + " • ") : "") + (modelData.size ? ((modelData.size / 1024 > 1024) ? ((modelData.size / (1024*1024)).toFixed(1) + " MB") : (Math.round(modelData.size / 1024) + " KB")) : "")))
                     textFormat: Text.PlainText
                     color: root.dim
                     font.family: root.fontFamily
@@ -1434,57 +1547,13 @@ Panel {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                   if (modelData.is_dir) {
+                    pickerSearchInput.text = ""
                     root.loadPickerFiles(modelData.path)
                   } else {
                     root.attachFile(modelData.path)
                     root.closeFilePicker()
                   }
                 }
-              }
-            }
-          }
-
-          // Bottom Bar (System Dialog Option)
-          Row {
-            width: parent.width
-            height: Style.space(24)
-
-            Item { width: Style.space(1); height: parent.height }
-
-            BorderSurface {
-              anchors.right: parent.right
-              height: Style.space(24)
-              radius: Style.space(4)
-              color: nativePickM.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
-              borderSpec: Border.none
-              implicitWidth: nativePickRow.implicitWidth + Style.space(12)
-
-              Row {
-                id: nativePickRow
-                anchors.centerIn: parent
-                spacing: Style.space(4)
-
-                Text {
-                  text: "\uf07c"
-                  color: Color.accent
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                }
-
-                Text {
-                  text: "Open System File Chooser..."
-                  color: root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                }
-              }
-
-              MouseArea {
-                id: nativePickM
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.openNativeFilePicker()
               }
             }
           }
