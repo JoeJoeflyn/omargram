@@ -64,6 +64,24 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(4)
 
+        // Report Spam and Leave (for scam/spam channels or groups)
+        PanelActionButton {
+          visible: p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel)
+          iconText: "\uf071"
+          tooltipText: "Report spam and leave"
+          foreground: p.urgent; hoverColor: p.urgent; fontFamily: p.fontFamily
+          onClicked: p.reportSpamAndLeave(p.selectedChat.id)
+        }
+
+        // Leave Channel / Group
+        PanelActionButton {
+          visible: p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel)
+          iconText: "\uf2f5"
+          tooltipText: (p.selectedChat && p.selectedChat.is_channel) ? "Leave channel" : "Leave group"
+          foreground: p.foreground; hoverColor: p.urgent; fontFamily: p.fontFamily
+          onClicked: p.leaveChat(p.selectedChat.id)
+        }
+
         PanelActionButton {
           iconText: "\uf021"
           tooltipText: "Refresh messages"

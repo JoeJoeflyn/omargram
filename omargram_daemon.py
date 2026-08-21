@@ -36,7 +36,10 @@ os.makedirs(OMARGRAM_RUN_DIR, mode=0o700, exist_ok=True)
 
 try:
     from telethon import TelegramClient, events, functions, types
-    from telethon.tl.types import User, Chat, Channel, MessageMediaPhoto, MessageMediaDocument, MessageMediaWebPage, WebPage
+    from telethon.tl.types import User, Chat, Channel, MessageMediaPhoto, MessageMediaDocument, MessageMediaWebPage, WebPage, InputReportReasonSpam
+    from telethon.tl.functions.channels import LeaveChannelRequest
+    from telethon.tl.functions.messages import DeleteChatUserRequest, ReportSpamRequest
+    from telethon.tl.functions.account import ReportPeerRequest
     import qrcode
 except ImportError as e:
     print(f"Required library missing: {e}", file=sys.stderr)
@@ -435,6 +438,57 @@ class OmarGramDaemon:
                 cid = int(chat_id)
                 entity = await self.client.get_entity(cid)
                 await self.client.delete_dialog(entity, revoke=True)
+                self.dialogs_cache = [d for d in self.dialogs_cache if d.get("id") != cid]
+                await self.update_unread_count()
+                return {"success": True, "chat_id": cid}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        elif action == "leave_chat":
+            chat_id = cmd_dict.get("chat_id")
+            if not chat_id:
+                return {"success": False, "error": "chat_id required"}
+            try:
+                cid = int(chat_id)
+                entity = await self.client.get_entity(cid)
+                try:
+                    if isinstance(entity, Channel):
+                        await self.client(LeaveChannelRequest(channel=entity))
+                    elif isinstance(entity, Chat):
+                        await self.client(DeleteChatUserRequest(chat_id=cid, user_id='me'))
+                    else:
+                        await self.client.delete_dialog(entity, revoke=True)
+                except Exception:
+                    await self.client.delete_dialog(entity)
+                self.dialogs_cache = [d for d in self.dialogs_cache if d.get("id") != cid]
+                await self.update_unread_count()
+                return {"success": True, "chat_id": cid}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        elif action == "report_spam_and_leave":
+            chat_id = cmd_dict.get("chat_id")
+            if not chat_id:
+                return {"success": False, "error": "chat_id required"}
+            try:
+                cid = int(chat_id)
+                entity = await self.client.get_entity(cid)
+                try:
+                    await self.client(ReportSpamRequest(peer=entity))
+                except Exception:
+                    try:
+                        await self.client(ReportPeerRequest(peer=entity, reason=InputReportReasonSpam(), message="Spam and scam"))
+                    except Exception:
+                        pass
+                try:
+                    if isinstance(entity, Channel):
+                        await self.client(LeaveChannelRequest(channel=entity))
+                    elif isinstance(entity, Chat):
+                        await self.client(DeleteChatUserRequest(chat_id=cid, user_id='me'))
+                    else:
+                        await self.client.delete_dialog(entity, revoke=True)
+                except Exception:
+                    await self.client.delete_dialog(entity)
                 self.dialogs_cache = [d for d in self.dialogs_cache if d.get("id") != cid]
                 await self.update_unread_count()
                 return {"success": True, "chat_id": cid}

@@ -112,6 +112,18 @@ def main():
             sys.exit(1)
         chat_id = sys.argv[2]
         print(json.dumps(send_daemon_cmd({"action": "delete_chat", "chat_id": chat_id})))
+    elif action == "leave_chat":
+        if len(sys.argv) < 3:
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py leave_chat <chat_id>"}))
+            sys.exit(1)
+        chat_id = sys.argv[2]
+        print(json.dumps(send_daemon_cmd({"action": "leave_chat", "chat_id": chat_id})))
+    elif action in ("report_spam", "report_spam_and_leave"):
+        if len(sys.argv) < 3:
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py report_spam <chat_id>"}))
+            sys.exit(1)
+        chat_id = sys.argv[2]
+        print(json.dumps(send_daemon_cmd({"action": "report_spam_and_leave", "chat_id": chat_id})))
     elif action == "delete_message":
         if len(sys.argv) < 4:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py delete_message <chat_id> <message_id>"}))

@@ -260,8 +260,17 @@ Item {
         id: rowMouse
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
-        onClicked: p.selectChat(modelData)
+        onClicked: function(mouse) {
+          if (mouse.button === Qt.RightButton) {
+            var pt = rowMouse.mapToItem(root, mouse.x, mouse.y)
+            contextMenu.targetChat = modelData
+            contextMenu.showAt(pt.x, pt.y)
+          } else {
+            p.selectChat(modelData)
+          }
+        }
       }
 
       Item {
@@ -433,6 +442,221 @@ Item {
                 font.pixelSize: Style.font.caption * 0.88
                 font.bold: modelData.unread_count > 0
               }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Sleek Right-Click Context Menu for Leave / Report Spam / Mark Read / Delete
+  Item {
+    id: contextMenu
+    anchors.fill: parent
+    visible: targetChat !== null
+    z: 999
+
+    property var targetChat: null
+    property real menuX: 0
+    property real menuY: 0
+
+    function showAt(px, py) {
+      menuX = Math.max(8, Math.min(px, root.width - menuBox.width - 8))
+      menuY = Math.max(8, Math.min(py, root.height - menuBox.implicitHeight - 8))
+    }
+
+    function hide() {
+      targetChat = null
+    }
+
+    // Dismiss backdrop
+    MouseArea {
+      anchors.fill: parent
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
+      onClicked: contextMenu.hide()
+    }
+
+    BorderSurface {
+      id: menuBox
+      x: contextMenu.menuX
+      y: contextMenu.menuY
+      width: Style.space(170)
+      implicitHeight: menuCol.implicitHeight + Style.space(8)
+      radius: Style.cornerRadius
+      color: Color.popups.background
+      borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15), 1)
+
+      Column {
+        id: menuCol
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: Style.space(4)
+        spacing: Style.space(2)
+
+        // 1. Mark as read
+        Rectangle {
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: markReadMouse.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf00c"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Mark as Read"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          MouseArea {
+            id: markReadMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (contextMenu.targetChat) p.markChatRead(contextMenu.targetChat.id)
+              contextMenu.hide()
+            }
+          }
+        }
+
+        // 2. Leave Group / Leave Channel
+        Rectangle {
+          visible: contextMenu.targetChat && (contextMenu.targetChat.is_group || contextMenu.targetChat.is_channel)
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: leaveMouse.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf2f5"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: (contextMenu.targetChat && contextMenu.targetChat.is_channel) ? "Leave Channel" : "Leave Group"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          MouseArea {
+            id: leaveMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (contextMenu.targetChat) p.leaveChat(contextMenu.targetChat.id)
+              contextMenu.hide()
+            }
+          }
+        }
+
+        // 3. Report Spam and Leave (in warning/urgent red)
+        Rectangle {
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: reportMouse.containsMouse ? Qt.rgba(p.urgent.r, p.urgent.g, p.urgent.b, 0.15) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf071"
+              color: p.urgent
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Report Spam & Leave"
+              color: p.urgent
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+          }
+
+          MouseArea {
+            id: reportMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (contextMenu.targetChat) p.reportSpamAndLeave(contextMenu.targetChat.id)
+              contextMenu.hide()
+            }
+          }
+        }
+
+        // 4. Delete Chat (for private DMs)
+        Rectangle {
+          visible: contextMenu.targetChat && contextMenu.targetChat.is_user
+          width: parent.width
+          height: Style.space(28)
+          radius: Style.space(4)
+          color: delChatMouse.containsMouse ? Qt.rgba(p.urgent.r, p.urgent.g, p.urgent.b, 0.15) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf2ed"
+              color: p.urgent
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Delete Chat"
+              color: p.urgent
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          MouseArea {
+            id: delChatMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (contextMenu.targetChat) p.deleteChat(contextMenu.targetChat.id)
+              contextMenu.hide()
             }
           }
         }

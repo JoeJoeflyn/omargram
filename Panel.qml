@@ -153,6 +153,33 @@ Panel {
     actionProc.running = true
 
     allChats = allChats.filter(function(c) { return c.id !== chatId })
+    if (messagesCache[chatId]) delete messagesCache[chatId]
+    if (selectedChat && selectedChat.id === chatId) {
+      closeActiveChat()
+    }
+  }
+
+  function leaveChat(chatId) {
+    if (!chatId) return
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "leave_chat", String(chatId)]
+    actionProc.running = true
+
+    allChats = allChats.filter(function(c) { return c.id !== chatId })
+    if (messagesCache[chatId]) delete messagesCache[chatId]
+    if (selectedChat && selectedChat.id === chatId) {
+      closeActiveChat()
+    }
+  }
+
+  function reportSpamAndLeave(chatId) {
+    if (!chatId) return
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "report_spam", String(chatId)]
+    actionProc.running = true
+
+    allChats = allChats.filter(function(c) { return c.id !== chatId })
+    if (messagesCache[chatId]) delete messagesCache[chatId]
     if (selectedChat && selectedChat.id === chatId) {
       closeActiveChat()
     }
