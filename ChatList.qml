@@ -232,11 +232,17 @@ Item {
         required property var modelData
         required property int index
         readonly property bool isSelected: p.selectedChat && p.selectedChat.id === modelData.id
+        property bool isSnapping: false
+
         width: chatListView.width
-        height: Style.space(56)
+        height: isSnapping ? 0 : Style.space(56)
+        opacity: isSnapping ? 0.0 : 1.0
         radius: Style.cornerRadius
         color: isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : (rowMouse.containsMouse ? Style.hoverFillFor(p.foreground, Color.accent) : "transparent")
         borderSpec: isSelected ? Border.flat(Color.accent, 1) : Border.none
+
+        Behavior on height { NumberAnimation { duration: 280; easing.type: Easing.InOutQuad } }
+        Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutQuad } }
 
         MouseArea {
           id: rowMouse
@@ -304,47 +310,67 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             height: Style.space(36)
 
-            // Top row: Title + Time / Delete button
+            // Top row: Title + Time / Delete button (Fixed layout, 0 jump/shake)
             Item {
               anchors.top: parent.top
               anchors.left: parent.left
               anchors.right: parent.right
               height: Style.space(18)
 
-              Row {
-                id: topActionRow
+              // Right Action Container (Static width = no shaking)
+              Item {
+                id: topActionBox
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: Style.space(6)
+                width: Style.space(46)
+                height: parent.height
 
-                Text {
-                  visible: rowMouse.containsMouse
-                  text: "\uf2ed"
-                  color: delMouse.containsMouse ? p.urgent : p.dim
-                  font.family: p.fontFamily
-                  font.pixelSize: Style.font.caption * 0.85
-
-                  MouseArea {
-                    id: delMouse
-                    anchors.fill: parent; anchors.margins: -4
-                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                    onClicked: p.deleteChat(modelData.id)
-                  }
-                }
-
+                // Time (visible by default)
                 Text {
                   id: timeText
+                  visible: !rowMouse.containsMouse
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
                   textFormat: Text.PlainText
                   text: (modelData.last_message && modelData.last_message.time) ? modelData.last_message.time : ""
                   color: modelData.unread_count > 0 ? Color.accent : p.dim
                   font.family: p.fontFamily
                   font.pixelSize: Style.font.caption * 0.8
                 }
+
+                // Delete Chat icon on hover (appears in the exact same spot with 0 layout shift)
+                Text {
+                  visible: rowMouse.containsMouse
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: "\uf2ed"
+                  color: delMouse.containsMouse ? p.urgent : p.dim
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.font.caption * 0.9
+
+                  MouseArea {
+                    id: delMouse
+                    anchors.fill: parent; anchors.margins: -4
+                    hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                      chatRow.isSnapping = true
+                      snapTimer.start()
+                    }
+                  }
+
+                  Timer {
+                    id: snapTimer
+                    interval: 280
+                    repeat: false
+                    onTriggered: p.deleteChat(modelData.id)
+                  }
+                }
               }
 
+              // Chat Title (anchored with fixed right margin = 0 jitter)
               Text {
                 anchors.left: parent.left
-                anchors.right: topActionRow.left
+                anchors.right: topActionBox.left
                 anchors.rightMargin: Style.space(4)
                 anchors.verticalCenter: parent.verticalCenter
                 textFormat: Text.PlainText

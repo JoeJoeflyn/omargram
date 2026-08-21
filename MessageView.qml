@@ -3,14 +3,14 @@ import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 
-// Chat message stream with avatars for both sender and user, Omarchy theme sync, and delete chat action
+// Chat message stream with avatars for both sender and user, Omarchy theme sync, Thanos snap animation, and delete actions
 Item {
   id: root
   property var p  // Panel root
 
   anchors.fill: parent
 
-  // 1. Top Chat Header Bar
+  // 1. Top Chat Header Bar (Anchored layout — 0 text overlap)
   BorderSurface {
     id: chatHeader
     anchors.top: parent.top
@@ -21,15 +21,15 @@ Item {
     color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.04)
     borderSpec: Border.none
 
-    Row {
+    Item {
       anchors.fill: parent
       anchors.leftMargin: Style.space(10)
       anchors.rightMargin: Style.space(10)
-      anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.space(8)
 
-      // Header Chat Avatar
+      // Header Chat Avatar (Left)
       BorderSurface {
+        id: headerAvatarBox
+        anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         width: Style.space(32); height: Style.space(32)
         radius: width / 2.0
@@ -57,40 +57,9 @@ Item {
         }
       }
 
-      // Title & Status Column
-      Column {
-        width: parent.width - Style.space(150)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 1
-
-        Text {
-          width: parent.width
-          textFormat: Text.PlainText
-          text: p.selectedChat ? p.selectedChat.title : ""
-          color: p.foreground
-          font.family: p.fontFamily
-          font.pixelSize: Style.font.body
-          font.bold: true
-          elide: Text.ElideRight
-        }
-
-        Text {
-          textFormat: Text.PlainText
-          text: {
-            if (!p.selectedChat) return ""
-            if (p.selectedChat.online) return "online"
-            if (p.selectedChat.is_channel) return "channel"
-            if (p.selectedChat.is_group) return "group"
-            return p.selectedChat.username ? "@" + p.selectedChat.username : "last seen recently"
-          }
-          color: (p.selectedChat && p.selectedChat.online) ? Color.accent : p.dim
-          font.family: p.fontFamily
-          font.pixelSize: Style.font.caption * 0.85
-        }
-      }
-
-      // Header Action Buttons
+      // Header Action Buttons (Right)
       Row {
+        id: headerActionBtns
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(4)
@@ -111,7 +80,7 @@ Item {
 
         PanelActionButton {
           iconText: "\uf2ed"
-          tooltipText: "Delete / Leave chat"
+          tooltipText: "Delete for both users"
           foreground: p.foreground; hoverColor: p.urgent; fontFamily: p.fontFamily
           onClicked: p.deleteChat(p.selectedChat.id)
         }
@@ -121,6 +90,43 @@ Item {
           tooltipText: "Close chat"
           foreground: p.foreground; hoverColor: p.urgent; fontFamily: p.fontFamily
           onClicked: p.closeActiveChat()
+        }
+      }
+
+      // Title & Status Column (Fills space between avatar and actions)
+      Column {
+        anchors.left: headerAvatarBox.right
+        anchors.leftMargin: Style.space(8)
+        anchors.right: headerActionBtns.left
+        anchors.rightMargin: Style.space(8)
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 1
+
+        Text {
+          width: parent.width
+          textFormat: Text.PlainText
+          text: p.selectedChat ? p.selectedChat.title : ""
+          color: p.foreground
+          font.family: p.fontFamily
+          font.pixelSize: Style.font.body
+          font.bold: true
+          elide: Text.ElideRight
+        }
+
+        Text {
+          width: parent.width
+          textFormat: Text.PlainText
+          text: {
+            if (!p.selectedChat) return ""
+            if (p.selectedChat.online) return "online"
+            if (p.selectedChat.is_channel) return "channel"
+            if (p.selectedChat.is_group) return "group"
+            return p.selectedChat.username ? "@" + p.selectedChat.username : "last seen recently"
+          }
+          color: (p.selectedChat && p.selectedChat.online) ? Color.accent : p.dim
+          font.family: p.fontFamily
+          font.pixelSize: Style.font.caption * 0.85
+          elide: Text.ElideRight
         }
       }
     }
@@ -170,14 +176,36 @@ Item {
       }
     }
 
-    // Message Row Delegate
+    // Message Row Delegate with Thanos Snap disintegration
     delegate: Item {
       id: msgRow
       required property var modelData
       required property int index
       readonly property bool isOut: modelData.out === true
+      property bool isSnapping: false
+
       width: msgListView.width
-      height: bubbleContentCol.implicitHeight + Style.space(16)
+      height: isSnapping ? 0 : (bubbleContentCol.implicitHeight + Style.space(16))
+      opacity: isSnapping ? 0.0 : 1.0
+      scale: isSnapping ? 0.8 : 1.0
+
+      Behavior on height { NumberAnimation { duration: 320; easing.type: Easing.InOutQuad } }
+      Behavior on opacity { NumberAnimation { duration: 260; easing.type: Easing.OutQuad } }
+      Behavior on scale { NumberAnimation { duration: 280; easing.type: Easing.OutBack } }
+
+      function triggerThanosSnap() {
+        msgRow.isSnapping = true
+        snapTimer.start()
+      }
+
+      Timer {
+        id: snapTimer
+        interval: 320
+        repeat: false
+        onTriggered: {
+          p.deleteMessage(p.selectedChat.id, modelData.id)
+        }
+      }
 
       MouseArea {
         id: msgMouseArea
@@ -323,7 +351,7 @@ Item {
             anchors.right: parent.right
             spacing: Style.space(5)
 
-            // Delete Message button on hover
+            // Delete Message button on hover (Triggers Thanos Snap dissolve)
             Text {
               visible: msgMouseArea.containsMouse
               text: "\uf2ed"
@@ -335,7 +363,7 @@ Item {
                 id: delMsgMouse
                 anchors.fill: parent; anchors.margins: -4
                 hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                onClicked: p.deleteMessage(p.selectedChat.id, modelData.id)
+                onClicked: msgRow.triggerThanosSnap()
               }
             }
 

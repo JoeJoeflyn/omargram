@@ -379,7 +379,7 @@ class OmarGramDaemon:
             try:
                 cid = int(chat_id)
                 entity = await self.client.get_entity(cid)
-                await self.client.delete_dialog(entity)
+                await self.client.delete_dialog(entity, revoke=True)
                 self.dialogs_cache = [d for d in self.dialogs_cache if d.get("id") != cid]
                 await self.update_unread_count()
                 return {"success": True, "chat_id": cid}
