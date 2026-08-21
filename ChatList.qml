@@ -31,67 +31,95 @@ Item {
       anchors.leftMargin: Style.space(8)
       anchors.rightMargin: Style.space(8)
 
-      // User Avatar (Left)
-      BorderSurface {
-        id: userAvatarBox
-        visible: !p.sidebarCollapsed
+      // Clickable Profile Area (Avatar + User Name)
+      Item {
+        id: profileClickArea
         anchors.left: parent.left
-        anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(28); height: Style.space(28)
-        radius: width / 2.0
-        color: Color.accent
-        borderSpec: Border.none
-        clip: true
+        anchors.right: collapseBtn.left
+        anchors.rightMargin: Style.space(6)
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
 
-        Image {
-          visible: p.userAvatar !== "" && p.userAvatar !== undefined
-          anchors.fill: parent
-          source: p.userAvatar ? "file://" + p.userAvatar : ""
-          fillMode: Image.PreserveAspectCrop
-          sourceSize.width: 56; sourceSize.height: 56
+        // User Avatar (Left)
+        BorderSurface {
+          id: userAvatarBox
+          anchors.left: p.sidebarCollapsed ? undefined : parent.left
+          anchors.horizontalCenter: p.sidebarCollapsed ? parent.horizontalCenter : undefined
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(28); height: Style.space(28)
+          radius: width / 2.0
+          color: Color.accent
+          borderSpec: Border.none
+          clip: true
+
+          Image {
+            visible: p.userAvatar !== "" && p.userAvatar !== undefined
+            anchors.fill: parent
+            source: p.userAvatar ? "file://" + p.userAvatar : ""
+            fillMode: Image.PreserveAspectCrop
+            sourceSize.width: 56; sourceSize.height: 56
+          }
+
+          Text {
+            visible: !p.userAvatar
+            anchors.centerIn: parent
+            textFormat: Text.PlainText
+            text: p.userInitials || "ME"
+            color: "#ffffff"
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.caption * 0.8
+            font.bold: true
+          }
         }
 
-        Text {
-          visible: !p.userAvatar
-          anchors.centerIn: parent
-          textFormat: Text.PlainText
-          text: p.userInitials || "ME"
-          color: "#ffffff"
-          font.family: p.fontFamily
-          font.pixelSize: Style.font.caption * 0.8
-          font.bold: true
+        // User Name Column (Fills space between avatar and collapse button)
+        Column {
+          visible: !p.sidebarCollapsed
+          anchors.left: userAvatarBox.right
+          anchors.leftMargin: Style.space(8)
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: 1
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            text: p.userName || "Connected"
+            color: p.foreground
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            text: p.userUsername ? "@" + p.userUsername : "Telegram"
+            color: p.dim
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.caption * 0.8
+            elide: Text.ElideRight
+          }
         }
-      }
 
-      // Logout Button (Right)
-      Text {
-        id: logoutBtn
-        visible: !p.sidebarCollapsed
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        text: "\uf2f5"
-        color: logoutMouse.containsMouse ? p.danger : p.dim
-        font.family: p.fontFamily
-        font.pixelSize: Style.font.caption
-
-        ToolTip.visible: logoutMouse.containsMouse
+        ToolTip.visible: profileMouse.containsMouse
         ToolTip.delay: 350
-        ToolTip.text: "Log out"
+        ToolTip.text: "Account & Settings"
 
         MouseArea {
-          id: logoutMouse
-          anchors.fill: parent; anchors.margins: -4
-          hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-          onClicked: p.logout()
+          id: profileMouse
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: profileMenu.toggle()
         }
       }
 
-      // Sidebar Collapse / Expand Toggle Button
+      // Sidebar Collapse / Expand Toggle Button (Right)
       Text {
         id: collapseBtn
-        anchors.right: p.sidebarCollapsed ? undefined : logoutBtn.left
-        anchors.rightMargin: p.sidebarCollapsed ? 0 : Style.space(8)
-        anchors.horizontalCenter: p.sidebarCollapsed ? parent.horizontalCenter : undefined
+        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         text: p.sidebarCollapsed ? "\uf061" : "\uf060"
         color: collapseMouse.containsMouse ? Color.accent : p.dim
@@ -109,38 +137,6 @@ Item {
           hoverEnabled: true
           cursorShape: Qt.PointingHandCursor
           onClicked: p.toggleSidebar()
-        }
-      }
-
-      // User Name Column (Fills space between avatar and actions)
-      Column {
-        visible: !p.sidebarCollapsed
-        anchors.left: userAvatarBox.right
-        anchors.leftMargin: Style.space(8)
-        anchors.right: collapseBtn.left
-        anchors.rightMargin: Style.space(6)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 1
-
-        Text {
-          width: parent.width
-          textFormat: Text.PlainText
-          text: p.userName || "Connected"
-          color: p.foreground
-          font.family: p.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
-          elide: Text.ElideRight
-        }
-
-        Text {
-          width: parent.width
-          textFormat: Text.PlainText
-          text: p.userUsername ? "@" + p.userUsername : "Telegram"
-          color: p.dim
-          font.family: p.fontFamily
-          font.pixelSize: Style.font.caption * 0.8
-          elide: Text.ElideRight
         }
       }
     }
@@ -742,6 +738,159 @@ Item {
             onClicked: {
               if (contextMenu.targetChat) p.deleteChat(contextMenu.targetChat.id)
               contextMenu.hide()
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 6. User Account Profile Dropdown Menu (Clean & secure location for Log Out)
+  Item {
+    id: profileMenu
+    anchors.fill: parent
+    visible: false
+    z: 1000
+
+    function toggle() {
+      visible = !visible
+    }
+
+    function hide() {
+      visible = false
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
+      onClicked: profileMenu.hide()
+    }
+
+    BorderSurface {
+      id: profileBox
+      anchors.top: headerCard.bottom
+      anchors.topMargin: Style.space(4)
+      anchors.left: parent.left
+      anchors.leftMargin: Style.space(4)
+      width: Style.space(220)
+      implicitHeight: profileCol.implicitHeight + Style.space(12)
+      radius: Style.cornerRadius
+      color: Color.popups.background
+      borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15), 1)
+
+      Column {
+        id: profileCol
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: Style.space(8)
+        spacing: Style.space(8)
+
+        // Account Profile Row
+        Row {
+          width: parent.width
+          spacing: Style.space(10)
+
+          BorderSurface {
+            width: Style.space(34); height: Style.space(34)
+            radius: width / 2.0
+            color: Color.accent
+            borderSpec: Border.none
+            clip: true
+
+            Image {
+              visible: p.userAvatar !== "" && p.userAvatar !== undefined
+              anchors.fill: parent
+              source: p.userAvatar ? "file://" + p.userAvatar : ""
+              fillMode: Image.PreserveAspectCrop
+              sourceSize.width: 68; sourceSize.height: 68
+            }
+
+            Text {
+              visible: !p.userAvatar
+              anchors.centerIn: parent
+              textFormat: Text.PlainText
+              text: p.userInitials || "ME"
+              color: "#ffffff"
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+          }
+
+          Column {
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width - Style.space(48)
+            spacing: 1
+
+            Text {
+              width: parent.width
+              textFormat: Text.PlainText
+              text: p.userName || "Connected"
+              color: p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+              elide: Text.ElideRight
+            }
+
+            Text {
+              width: parent.width
+              textFormat: Text.PlainText
+              text: p.userUsername ? "@" + p.userUsername : "Telegram Account"
+              color: p.dim
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption * 0.85
+              elide: Text.ElideRight
+            }
+          }
+        }
+
+        // Divider
+        Rectangle {
+          width: parent.width
+          height: 1
+          color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)
+        }
+
+        // Log out action item
+        Rectangle {
+          width: parent.width
+          height: Style.space(30)
+          radius: Style.space(4)
+          color: logoutM.containsMouse ? Qt.rgba(p.danger.r, p.danger.g, p.danger.b, 0.15) : "transparent"
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "\uf2f5"
+              color: p.danger
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Log Out of Telegram"
+              color: p.danger
+              font.family: p.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+          }
+
+          MouseArea {
+            id: logoutM
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              profileMenu.hide()
+              p.logout()
             }
           }
         }
