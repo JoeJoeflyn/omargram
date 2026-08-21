@@ -208,11 +208,11 @@ Item {
       required property var modelData
       required property int index
       readonly property bool isOut: modelData.out === true
-      property bool isHovered: bubbleMouse.containsMouse || delBtnMouse.containsMouse
+      property bool isHovered: bubbleMouse.containsMouse || actionCapsuleMouse.containsMouse
       property bool isSnapping: false
 
       width: msgListView.width
-      height: bubbleContentCol.implicitHeight + Style.space(16)
+      height: bubbleSurface.height + Style.space(8)
       opacity: isSnapping ? 0.0 : 1.0
 
       function snapAndRemove() {
@@ -233,8 +233,7 @@ Item {
         visible: !msgRow.isOut
         anchors.left: parent.left
         anchors.leftMargin: Style.space(6)
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: Style.space(8)
+        anchors.bottom: bubbleSurface.bottom
         width: Style.space(28); height: Style.space(28)
         opacity: msgRow.isSnapping ? 0.0 : 1.0
 
@@ -272,8 +271,7 @@ Item {
         visible: msgRow.isOut
         anchors.right: parent.right
         anchors.rightMargin: Style.space(6)
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: Style.space(8)
+        anchors.bottom: bubbleSurface.bottom
         width: Style.space(28); height: Style.space(28)
         opacity: msgRow.isSnapping ? 0.0 : 1.0
 
@@ -305,7 +303,139 @@ Item {
         }
       }
 
-      // 3. Message Bubble Surface
+      // 3. Floating Quick Actions & Reaction Toolbar (Appears on hover above the bubble)
+      BorderSurface {
+        id: actionCapsule
+        visible: msgRow.isHovered && !msgRow.isSnapping
+        z: 20
+        anchors.bottom: bubbleSurface.top
+        anchors.bottomMargin: Style.space(2)
+        anchors.right: msgRow.isOut ? bubbleSurface.right : undefined
+        anchors.left: msgRow.isOut ? undefined : bubbleSurface.left
+        height: Style.space(26)
+        implicitWidth: capsuleRow.implicitWidth + Style.space(12)
+        radius: Style.space(13)
+        color: Color.popups.background
+        borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.18), 1)
+
+        MouseArea {
+          id: actionCapsuleMouse
+          anchors.fill: parent
+          hoverEnabled: true
+        }
+
+        Row {
+          id: capsuleRow
+          anchors.centerIn: parent
+          spacing: Style.space(2)
+
+          // Quick Reactions (👍 ❤️ 🔥 😂 👏)
+          Repeater {
+            model: ["👍", "❤️", "🔥", "😂", "👏"]
+            delegate: Item {
+              required property string modelData
+              width: Style.space(20); height: Style.space(20)
+
+              Text {
+                anchors.centerIn: parent
+                text: modelData
+                font.pixelSize: Style.space(11)
+                scale: emojiBtnMouse.containsMouse ? 1.25 : 1.0
+                Behavior on scale { NumberAnimation { duration: 100 } }
+              }
+
+              MouseArea {
+                id: emojiBtnMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  p.sendReaction(p.selectedChat.id, msgRow.modelData.id, modelData)
+                }
+              }
+            }
+          }
+
+          // Separator Line
+          Rectangle {
+            width: 1; height: Style.space(12)
+            color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15)
+            anchors.verticalCenter: parent.verticalCenter
+          }
+
+          // Copy Text Button
+          Item {
+            width: Style.space(20); height: Style.space(20)
+            visible: msgRow.modelData.text !== ""
+            
+            Text {
+              anchors.centerIn: parent
+              text: "\uf0c5"
+              color: copyBtnMouse.containsMouse ? Color.accent : p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.space(9)
+            }
+
+            MouseArea {
+              id: copyBtnMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                p.copyToClipboard(msgRow.modelData.text)
+              }
+            }
+          }
+
+          // Reply Button
+          Item {
+            width: Style.space(20); height: Style.space(20)
+            
+            Text {
+              anchors.centerIn: parent
+              text: "\uf112"
+              color: replyBtnMouse.containsMouse ? Color.accent : p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.space(9)
+            }
+
+            MouseArea {
+              id: replyBtnMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                p.replyToMessage(msgRow.modelData)
+              }
+            }
+          }
+
+          // Delete Button
+          Item {
+            width: Style.space(20); height: Style.space(20)
+
+            Text {
+              anchors.centerIn: parent
+              text: "\uf2ed"
+              color: delCapsuleBtnMouse.containsMouse ? p.urgent : p.foreground
+              font.family: p.fontFamily
+              font.pixelSize: Style.space(9)
+            }
+
+            MouseArea {
+              id: delCapsuleBtnMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                msgRow.snapAndRemove()
+              }
+            }
+          }
+        }
+      }
+
+      // 4. Message Bubble Surface
       BorderSurface {
         id: bubbleSurface
         anchors.left: msgRow.isOut ? undefined : leftAvatar.right
@@ -451,37 +581,63 @@ Item {
             }
           }
 
+          // Interactive Reactions Flow (Rendered inside/below the message bubble)
+          Flow {
+            visible: modelData.reactions !== undefined && modelData.reactions !== null && modelData.reactions.length > 0
+            width: parent.width
+            spacing: Style.space(4)
+
+            Repeater {
+              model: modelData.reactions || []
+              delegate: BorderSurface {
+                required property var modelData
+                required property int index
+                readonly property bool isChosen: modelData.chosen === true
+
+                height: Style.space(22)
+                implicitWidth: rxRow.implicitWidth + Style.space(12)
+                radius: Style.space(11)
+                color: isChosen ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.35) : (rxMouse.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15) : (msgRow.isOut ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)))
+                borderSpec: isChosen ? Border.flat(Color.accent, 1) : Border.none
+
+                Row {
+                  id: rxRow
+                  anchors.centerIn: parent
+                  spacing: Style.space(3)
+
+                  Text {
+                    text: modelData.emoticon || "👍"
+                    font.pixelSize: Style.space(11)
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+
+                  Text {
+                    text: String(modelData.count || 1)
+                    color: msgRow.isOut ? "#ffffff" : p.foreground
+                    font.family: p.fontFamily
+                    font.pixelSize: Style.space(9)
+                    font.bold: true
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                }
+
+                MouseArea {
+                  id: rxMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: {
+                    p.sendReaction(p.selectedChat.id, msgRow.modelData.id, modelData.emoticon)
+                  }
+                }
+              }
+            }
+          }
+
           // Timestamp and status row
           Row {
             anchors.right: parent.right
             spacing: Style.space(6)
-
-            // Delete Message Button (Static footprint with opacity fade = 0 layout resizing on hover)
-            Item {
-              width: Style.space(16)
-              height: Style.space(14)
-              opacity: (msgRow.isHovered && !msgRow.isSnapping) ? 1.0 : 0.0
-              anchors.verticalCenter: parent.verticalCenter
-
-              Text {
-                anchors.centerIn: parent
-                text: "\uf2ed"
-                color: delBtnMouse.containsMouse ? p.urgent : (msgRow.isOut ? Qt.rgba(1, 1, 1, 0.85) : p.dim)
-                font.family: p.fontFamily
-                font.pixelSize: Style.space(10)
-              }
-
-              MouseArea {
-                id: delBtnMouse
-                anchors.fill: parent
-                anchors.margins: -4
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                  msgRow.snapAndRemove()
-                }
-              }
-            }
 
             Text {
               textFormat: Text.PlainText

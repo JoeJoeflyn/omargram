@@ -36,9 +36,9 @@ os.makedirs(OMARGRAM_RUN_DIR, mode=0o700, exist_ok=True)
 
 try:
     from telethon import TelegramClient, events, functions, types
-    from telethon.tl.types import User, Chat, Channel, MessageMediaPhoto, MessageMediaDocument, MessageMediaWebPage, WebPage, InputReportReasonSpam
+    from telethon.tl.types import User, Chat, Channel, MessageMediaPhoto, MessageMediaDocument, MessageMediaWebPage, WebPage, InputReportReasonSpam, ReactionEmoji
     from telethon.tl.functions.channels import LeaveChannelRequest
-    from telethon.tl.functions.messages import DeleteChatUserRequest, ReportSpamRequest
+    from telethon.tl.functions.messages import DeleteChatUserRequest, ReportSpamRequest, SendReactionRequest
     from telethon.tl.functions.account import ReportPeerRequest
     import qrcode
 except ImportError as e:
@@ -348,6 +348,21 @@ class OmarGramDaemon:
                 is_read = bool(m.out and read_outbox_max_id > 0 and m.id <= read_outbox_max_id)
                 msg_status = "read" if is_read else ("sent" if m.out else "")
 
+                reactions_list = []
+                if hasattr(m, "reactions") and m.reactions and hasattr(m.reactions, "results"):
+                    for r in m.reactions.results:
+                        emoticon = ""
+                        if isinstance(r.reaction, ReactionEmoji):
+                            emoticon = r.reaction.emoticon
+                        elif hasattr(r.reaction, "document_id"):
+                            emoticon = "⭐"
+                        if emoticon:
+                            reactions_list.append({
+                                "emoticon": emoticon,
+                                "count": r.count,
+                                "chosen": bool(getattr(r, "chosen", False))
+                            })
+
                 result.append({
                     "id": m.id,
                     "chat_id": cid,
@@ -362,6 +377,7 @@ class OmarGramDaemon:
                     "out": bool(m.out),
                     "status": msg_status,
                     "is_read": is_read,
+                    "reactions": reactions_list,
                     "media_type": media_type,
                     "media_path": media_path,
                     "webpage": webpage_meta,
@@ -509,6 +525,22 @@ class OmarGramDaemon:
                 except Exception:
                     await self.client.delete_messages(entity, [mid])
                 return {"success": True, "chat_id": cid, "message_id": mid}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        elif action == "send_reaction":
+            chat_id = cmd_dict.get("chat_id")
+            msg_id = cmd_dict.get("message_id")
+            emoticon = cmd_dict.get("emoticon", "👍")
+            if not chat_id or not msg_id:
+                return {"success": False, "error": "chat_id and message_id required"}
+            try:
+                cid = int(chat_id)
+                mid = int(msg_id)
+                entity = await self.client.get_entity(cid)
+                reaction_list = [ReactionEmoji(emoticon=emoticon)] if emoticon else []
+                await self.client(SendReactionRequest(peer=entity, msg_id=mid, reaction=reaction_list))
+                return {"success": True, "chat_id": cid, "message_id": mid, "emoticon": emoticon}
             except Exception as e:
                 return {"success": False, "error": str(e)}
 

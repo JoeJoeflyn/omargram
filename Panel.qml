@@ -141,9 +141,31 @@ Panel {
     }
   }
 
+  property var replyingTo: null
+
+  function replyToMessage(msg) {
+    replyingTo = msg
+  }
+
+  function clearReply() {
+    replyingTo = null
+  }
+
+  Process {
+    id: copyProc
+  }
+
+  function copyToClipboard(text) {
+    if (!text) return
+    copyProc.running = false
+    copyProc.command = ["wl-copy", text]
+    copyProc.running = true
+  }
+
   function closeActiveChat() {
     selectedChat = null
     activeMessages = []
+    replyingTo = null
   }
 
   function deleteChat(chatId) {
@@ -195,6 +217,39 @@ Panel {
     activeMessages = activeMessages.filter(function(m) { return m.id !== messageId })
     if (messagesCache[chatId]) {
       messagesCache[chatId] = messagesCache[chatId].filter(function(m) { return m.id !== messageId })
+    }
+  }
+
+  function sendReaction(chatId, messageId, emoticon) {
+    if (!chatId || !messageId) return
+    actionProc.running = false
+    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "reaction", String(chatId), String(messageId), emoticon || "👍"]
+    actionProc.running = true
+
+    // Optimistically update message reaction in activeMessages and cache
+    var updated = []
+    for (var i = 0; i < activeMessages.length; i++) {
+      var m = Object.assign({}, activeMessages[i])
+      if (m.id === messageId) {
+        var rList = (m.reactions || []).slice()
+        var found = false
+        for (var j = 0; j < rList.length; j++) {
+          if (rList[j].emoticon === emoticon) {
+            rList[j] = Object.assign({}, rList[j], { count: rList[j].count + 1, chosen: true })
+            found = true
+            break
+          }
+        }
+        if (!found) {
+          rList.push({ emoticon: emoticon, count: 1, chosen: true })
+        }
+        m.reactions = rList
+      }
+      updated.push(m)
+    }
+    activeMessages = updated
+    if (messagesCache[chatId]) {
+      messagesCache[chatId] = updated
     }
   }
 

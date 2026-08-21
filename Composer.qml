@@ -8,18 +8,73 @@ Item {
   id: root
   property var p  // Panel root
 
-  implicitHeight: Math.max(Style.space(42), inputCapsule.implicitHeight + Style.space(8))
+  implicitHeight: (p.replyingTo ? Style.space(28) : 0) + Math.max(Style.space(42), inputCapsule.implicitHeight + Style.space(8))
 
-  BorderSurface {
-    id: inputCapsule
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.bottom: parent.bottom
-    anchors.margins: Style.space(4)
-    implicitHeight: Math.max(Style.space(34), Math.min(Style.space(100), inputArea.implicitHeight + Style.space(10)))
-    radius: Style.space(17)
-    color: Color.popups.background
-    borderSpec: Border.controlSpec(inputArea.activeFocus ? "focused" : "normal", p.foreground, Color.accent)
+  Column {
+    anchors.fill: parent
+    spacing: Style.space(2)
+
+    // Reply Quote Banner
+    BorderSurface {
+      visible: p.replyingTo !== null
+      width: parent.width
+      height: Style.space(26)
+      radius: Style.space(6)
+      color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.06)
+      borderSpec: Border.leftSpec(Color.accent, 2)
+
+      Row {
+        anchors.fill: parent
+        anchors.leftMargin: Style.space(6)
+        anchors.rightMargin: Style.space(6)
+        spacing: Style.space(6)
+
+        Text {
+          text: "\uf112"
+          color: Color.accent
+          font.family: p.fontFamily
+          font.pixelSize: Style.font.caption * 0.8
+          anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+          width: parent.width - Style.space(40)
+          textFormat: Text.PlainText
+          text: (p.replyingTo ? (p.replyingTo.sender_name + ": " + (p.replyingTo.text || "Media")) : "")
+          color: p.foreground
+          font.family: p.fontFamily
+          font.pixelSize: Style.font.caption * 0.85
+          elide: Text.ElideRight
+          anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+          text: "\uf00d"
+          color: cancelReplyMouse.containsMouse ? p.urgent : p.dim
+          font.family: p.fontFamily
+          font.pixelSize: Style.font.caption * 0.8
+          anchors.verticalCenter: parent.verticalCenter
+
+          MouseArea {
+            id: cancelReplyMouse
+            anchors.fill: parent
+            anchors.margins: -4
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: p.clearReply()
+          }
+        }
+      }
+    }
+
+    BorderSurface {
+      id: inputCapsule
+      width: parent.width
+      anchors.margins: Style.space(4)
+      implicitHeight: Math.max(Style.space(34), Math.min(Style.space(100), inputArea.implicitHeight + Style.space(10)))
+      radius: Style.space(17)
+      color: Color.popups.background
+      borderSpec: Border.controlSpec(inputArea.activeFocus ? "focused" : "normal", p.foreground, Color.accent)
 
     Row {
       anchors.fill: parent
@@ -90,11 +145,13 @@ Item {
       }
     }
   }
+}
 
   function sendMessage() {
     var txt = inputArea.text.trim()
     if (!txt || !p.selectedChat) return
     inputArea.text = ""
+    p.clearReply()
     p.sendMessageToActiveChat(txt)
   }
 }
