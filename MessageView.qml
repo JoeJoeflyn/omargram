@@ -853,6 +853,29 @@ Item {
         }
       }
     }
+
+    // Empty State Placeholder
+    Column {
+      visible: !p.activeMessages || p.activeMessages.length === 0
+      anchors.centerIn: parent
+      spacing: Style.space(6)
+
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "\uf4ad"
+        color: p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.space(26)
+      }
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        textFormat: Text.PlainText
+        text: "No messages in this chat"
+        color: p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+    }
   }
 
   // 4. Global Thanos Snap Particle Overlay (Dense, vibrant ash cloud)

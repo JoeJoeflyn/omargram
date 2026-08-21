@@ -451,6 +451,29 @@ Item {
         }
       }
     }
+
+    // Empty State Placeholder
+    Column {
+      visible: p.filteredChats.length === 0
+      anchors.centerIn: parent
+      spacing: Style.space(6)
+
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "\uf086"
+        color: p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.space(24)
+      }
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        textFormat: Text.PlainText
+        text: p.searchQuery ? "No conversations found" : "No conversations yet"
+        color: p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+    }
   }
 
   // Sleek Right-Click Context Menu for Leave / Report Spam / Mark Read / Delete
