@@ -160,10 +160,6 @@ Item {
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-    displaced: Transition {
-      NumberAnimation { properties: "y"; duration: 380; easing.type: Easing.OutQuad }
-    }
-
     Connections {
       target: p
       function onActiveMessagesChanged() {
@@ -183,11 +179,8 @@ Item {
       property bool isSnapping: false
 
       width: msgListView.width
-      height: isSnapping ? 0 : (bubbleContentCol.implicitHeight + Style.space(16))
+      height: bubbleContentCol.implicitHeight + Style.space(16)
       opacity: isSnapping ? 0.0 : 1.0
-
-      Behavior on height { NumberAnimation { duration: 450; easing.type: Easing.InOutQuad } }
-      Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
 
       function snapAndRemove() {
         if (msgRow.isSnapping) return
