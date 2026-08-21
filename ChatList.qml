@@ -8,7 +8,9 @@ Item {
   id: root
   property var p  // Panel root
 
-  width: Style.space(260)
+  width: p.sidebarCollapsed ? Style.space(56) : Style.space(260)
+  Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
   anchors.top: parent.top
   anchors.bottom: parent.bottom
   anchors.left: parent.left
@@ -32,6 +34,7 @@ Item {
       // User Avatar (Left)
       BorderSurface {
         id: userAvatarBox
+        visible: !p.sidebarCollapsed
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         width: Style.space(28); height: Style.space(28)
@@ -63,12 +66,17 @@ Item {
       // Logout Button (Right)
       Text {
         id: logoutBtn
+        visible: !p.sidebarCollapsed
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         text: "\uf2f5"
-        color: logoutMouse.containsMouse ? p.urgent : p.dim
+        color: logoutMouse.containsMouse ? p.danger : p.dim
         font.family: p.fontFamily
         font.pixelSize: Style.font.caption
+
+        ToolTip.visible: logoutMouse.containsMouse
+        ToolTip.delay: 350
+        ToolTip.text: "Log out"
 
         MouseArea {
           id: logoutMouse
@@ -78,12 +86,39 @@ Item {
         }
       }
 
-      // User Name Column (Fills space between avatar and logout)
+      // Sidebar Collapse / Expand Toggle Button
+      Text {
+        id: collapseBtn
+        anchors.right: p.sidebarCollapsed ? undefined : logoutBtn.left
+        anchors.rightMargin: p.sidebarCollapsed ? 0 : Style.space(8)
+        anchors.horizontalCenter: p.sidebarCollapsed ? parent.horizontalCenter : undefined
+        anchors.verticalCenter: parent.verticalCenter
+        text: p.sidebarCollapsed ? "\uf061" : "\uf060"
+        color: collapseMouse.containsMouse ? Color.accent : p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.font.caption
+
+        ToolTip.visible: collapseMouse.containsMouse
+        ToolTip.delay: 350
+        ToolTip.text: p.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+
+        MouseArea {
+          id: collapseMouse
+          anchors.fill: parent
+          anchors.margins: -4
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: p.toggleSidebar()
+        }
+      }
+
+      // User Name Column (Fills space between avatar and actions)
       Column {
+        visible: !p.sidebarCollapsed
         anchors.left: userAvatarBox.right
         anchors.leftMargin: Style.space(8)
-        anchors.right: logoutBtn.left
-        anchors.rightMargin: Style.space(8)
+        anchors.right: collapseBtn.left
+        anchors.rightMargin: Style.space(6)
         anchors.verticalCenter: parent.verticalCenter
         spacing: 1
 
@@ -111,9 +146,10 @@ Item {
     }
   }
 
-  // 2. Search Box
+  // 2. Search Box (Hidden when sidebar is collapsed)
   BorderSurface {
     id: searchBox
+    visible: !p.sidebarCollapsed
     anchors.top: headerCard.bottom
     anchors.topMargin: Style.space(6)
     anchors.left: parent.left
@@ -168,6 +204,10 @@ Item {
         font.family: p.fontFamily
         font.pixelSize: Style.font.caption
 
+        ToolTip.visible: clearMouse.containsMouse
+        ToolTip.delay: 350
+        ToolTip.text: "Clear search"
+
         MouseArea {
           id: clearMouse
           anchors.fill: parent; anchors.margins: -4
@@ -178,9 +218,10 @@ Item {
     }
   }
 
-  // 3. Filter Chips (All, DMs, Groups, Channels)
+  // 3. Filter Chips (All, DMs, Groups, Channels) (Hidden when sidebar is collapsed)
   Row {
     id: filterRow
+    visible: !p.sidebarCollapsed
     anchors.top: searchBox.bottom
     anchors.topMargin: Style.space(6)
     anchors.left: parent.left
@@ -226,7 +267,7 @@ Item {
   // 4. Chats ListView (Anchored rigidly top-to-bottom: 0 recalculation jumps)
   ListView {
     id: chatListView
-    anchors.top: filterRow.bottom
+    anchors.top: p.sidebarCollapsed ? headerCard.bottom : filterRow.bottom
     anchors.topMargin: Style.space(6)
     anchors.bottom: parent.bottom
     anchors.left: parent.left
@@ -277,16 +318,21 @@ Item {
         }
       }
 
+      ToolTip.visible: rowMouse.containsMouse && p.sidebarCollapsed
+      ToolTip.delay: 250
+      ToolTip.text: modelData.unread_count > 0 ? (modelData.title + " (" + modelData.unread_count + " unread)") : modelData.title
+
       Item {
         anchors.fill: parent
-        anchors.leftMargin: Style.space(8)
-        anchors.rightMargin: Style.space(8)
+        anchors.leftMargin: p.sidebarCollapsed ? 0 : Style.space(8)
+        anchors.rightMargin: p.sidebarCollapsed ? 0 : Style.space(8)
 
         // Avatar Item
         Item {
           id: avatarBox
           width: Style.space(38); height: Style.space(38)
-          anchors.left: parent.left
+          anchors.left: p.sidebarCollapsed ? undefined : parent.left
+          anchors.horizontalCenter: p.sidebarCollapsed ? parent.horizontalCenter : undefined
           anchors.verticalCenter: parent.verticalCenter
 
           BorderSurface {
@@ -325,10 +371,21 @@ Item {
             border.color: Color.popups.background; border.width: 1.5
             anchors.bottom: parent.bottom; anchors.right: parent.right
           }
+
+          // Unread badge dot when collapsed
+          Rectangle {
+            visible: p.sidebarCollapsed && modelData.unread_count > 0
+            width: Style.space(10); height: Style.space(10)
+            radius: width / 2.0
+            color: Color.accent
+            border.color: Color.popups.background; border.width: 1.5
+            anchors.top: parent.top; anchors.right: parent.right
+          }
         }
 
-        // Content Column
+        // Content Column (Hidden when sidebar is collapsed)
         Item {
+          visible: !p.sidebarCollapsed
           anchors.left: avatarBox.right
           anchors.leftMargin: Style.space(8)
           anchors.right: parent.right

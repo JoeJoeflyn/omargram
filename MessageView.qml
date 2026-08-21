@@ -64,6 +64,14 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(4)
 
+        // Sidebar Collapse / Expand Toggle
+        PanelActionButton {
+          iconText: p.sidebarCollapsed ? "\uf061" : "\uf060"
+          tooltipText: p.sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+          foreground: p.foreground; hoverColor: Color.accent; fontFamily: p.fontFamily
+          onClicked: p.toggleSidebar()
+        }
+
         // Report Spam and Leave (for scam/spam channels or groups)
         PanelActionButton {
           visible: p.selectedChat && (p.selectedChat.is_group || p.selectedChat.is_channel)
@@ -216,9 +224,13 @@ Item {
       Text {
         anchors.verticalCenter: parent.verticalCenter
         text: "\uf00d"
-        color: unpinMouse.containsMouse ? p.urgent : p.dim
+        color: unpinMouse.containsMouse ? p.danger : p.dim
         font.family: p.fontFamily
         font.pixelSize: Style.space(11)
+
+        ToolTip.visible: unpinMouse.containsMouse
+        ToolTip.delay: 350
+        ToolTip.text: "Unpin message"
 
         MouseArea {
           id: unpinMouse
@@ -266,18 +278,20 @@ Item {
     id: multiSelectBar
     visible: p.selectMode
     anchors.bottom: parent.bottom
-    anchors.bottomMargin: Style.space(8)
+    anchors.bottomMargin: Style.space(10)
     anchors.horizontalCenter: parent.horizontalCenter
-    width: Math.min(parent.width - Style.space(20), Style.space(340))
-    height: Style.space(40)
-    radius: Style.space(20)
+    width: Math.min(parent.width - Style.space(32), Style.space(360))
+    height: Style.space(42)
+    radius: Style.space(21)
     color: Color.popups.background
-    borderSpec: Border.flat(Color.accent, 1)
-    z: 20
+    borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.18), 1)
+    z: 80
 
     Row {
-      anchors.centerIn: parent
-      spacing: Style.space(12)
+      anchors.fill: parent
+      anchors.leftMargin: Style.space(14)
+      anchors.rightMargin: Style.space(14)
+      spacing: Style.space(14)
 
       Text {
         anchors.verticalCenter: parent.verticalCenter
@@ -309,7 +323,13 @@ Item {
           font.pixelSize: Style.font.caption
           font.bold: true
         }
+
+        ToolTip.visible: fwdSelM.containsMouse
+        ToolTip.delay: 350
+        ToolTip.text: "Forward selected messages"
+
         MouseArea {
+          id: fwdSelM
           anchors.fill: parent
           anchors.margins: -4
           hoverEnabled: true
@@ -329,6 +349,10 @@ Item {
         font.pixelSize: Style.space(12)
         opacity: p.selectedMsgIds.length > 0 ? 1.0 : 0.4
 
+        ToolTip.visible: copySelM.containsMouse
+        ToolTip.delay: 350
+        ToolTip.text: "Copy text"
+
         MouseArea {
           id: copySelM
           anchors.fill: parent
@@ -345,10 +369,14 @@ Item {
       Text {
         anchors.verticalCenter: parent.verticalCenter
         text: "\uf1f8"
-        color: delSelM.containsMouse ? p.urgent : p.foreground
+        color: delSelM.containsMouse ? p.danger : p.danger
         font.family: p.fontFamily
         font.pixelSize: Style.space(12)
         opacity: p.selectedMsgIds.length > 0 ? 1.0 : 0.4
+
+        ToolTip.visible: delSelM.containsMouse
+        ToolTip.delay: 350
+        ToolTip.text: "Delete selected messages"
 
         MouseArea {
           id: delSelM
@@ -366,9 +394,13 @@ Item {
       Text {
         anchors.verticalCenter: parent.verticalCenter
         text: "\uf00d"
-        color: cancelSelM.containsMouse ? p.urgent : p.dim
+        color: cancelSelM.containsMouse ? p.danger : p.dim
         font.family: p.fontFamily
         font.pixelSize: Style.space(12)
+
+        ToolTip.visible: cancelSelM.containsMouse
+        ToolTip.delay: 350
+        ToolTip.text: "Cancel selection"
 
         MouseArea {
           id: cancelSelM

@@ -61,10 +61,14 @@ Item {
 
         Text {
           text: "\uf00d"
-          color: cancelBannerMouse.containsMouse ? p.urgent : p.dim
+          color: cancelBannerMouse.containsMouse ? p.danger : p.dim
           font.family: p.fontFamily
           font.pixelSize: Style.font.caption * 0.8
           anchors.verticalCenter: parent.verticalCenter
+
+          ToolTip.visible: cancelBannerMouse.containsMouse
+          ToolTip.delay: 350
+          ToolTip.text: p.editingMessage ? "Cancel editing" : "Cancel reply"
 
           MouseArea {
             id: cancelBannerMouse
@@ -152,6 +156,10 @@ Item {
           font.family: p.fontFamily
           font.pixelSize: Style.font.caption
         }
+
+        ToolTip.visible: sendMouse.containsMouse
+        ToolTip.delay: 350
+        ToolTip.text: p.editingMessage ? "Save edit (Enter)" : "Send message (Enter)"
 
         MouseArea {
           id: sendMouse

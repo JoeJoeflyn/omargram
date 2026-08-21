@@ -36,6 +36,11 @@ Panel {
   property var filteredChats: []
   property string chatFilter: "all" // "all", "users", "groups", "channels"
   property string searchQuery: ""
+  property bool sidebarCollapsed: false
+
+  function toggleSidebar() {
+    sidebarCollapsed = !sidebarCollapsed
+  }
 
   property var selectedChat: null
   property var activeMessages: []
