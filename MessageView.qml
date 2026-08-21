@@ -184,33 +184,46 @@ Item {
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-    property real lastScrollY: 0
+    property real userScrollY: 0
+    property bool isRestoringScroll: false
 
+    onMovementEnded: {
+      if (!isRestoringScroll) userScrollY = contentY
+    }
+    onFlickEnded: {
+      if (!isRestoringScroll) userScrollY = contentY
+    }
     onContentYChanged: {
-      if (contentY > 10) {
-        lastScrollY = contentY
-      } else if (atYBeginning) {
-        lastScrollY = 0
+      if (!isRestoringScroll) {
+        if (moving || flicking || contentY > 15) {
+          userScrollY = contentY
+        } else if (atYBeginning && contentY <= 5) {
+          userScrollY = 0
+        }
       }
     }
 
     Connections {
       target: p
       function onSelectedChatChanged() {
-        msgListView.lastScrollY = 0
+        msgListView.isRestoringScroll = true
+        msgListView.userScrollY = 0
         msgListView.contentY = 0
         Qt.callLater(function() {
           msgListView.contentY = 0
           msgListView.positionViewAtBeginning()
+          msgListView.isRestoringScroll = false
         })
       }
       function onActiveMessagesChanged() {
-        if (msgListView.lastScrollY > 10) {
-          msgListView.contentY = msgListView.lastScrollY
+        if (msgListView.userScrollY > 15) {
+          msgListView.isRestoringScroll = true
+          msgListView.contentY = msgListView.userScrollY
           Qt.callLater(function() {
-            if (msgListView.lastScrollY > 10) {
-              msgListView.contentY = msgListView.lastScrollY
+            if (msgListView.userScrollY > 15) {
+              msgListView.contentY = msgListView.userScrollY
             }
+            msgListView.isRestoringScroll = false
           })
         }
       }
