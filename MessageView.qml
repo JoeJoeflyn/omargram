@@ -343,7 +343,7 @@ Item {
       // Delete button
       Text {
         anchors.verticalCenter: parent.verticalCenter
-        text: "\uf2ed"
+        text: "\uf1f8"
         color: delSelM.containsMouse ? p.urgent : p.foreground
         font.family: p.fontFamily
         font.pixelSize: Style.space(12)
@@ -972,8 +972,15 @@ Item {
     property real menuY: 0
 
     function showAt(px, py) {
-      menuX = Math.max(8, Math.min(px, root.width - msgMenuBox.width - 8))
-      menuY = Math.max(8, Math.min(py, root.height - msgMenuBox.implicitHeight - 8))
+      var estH = Style.space(270)
+      var menuW = Style.space(190)
+      var targetX = Math.max(Style.space(8), Math.min(px, root.width - menuW - Style.space(8)))
+      var targetY = py
+      if (py + estH > root.height - Style.space(10)) {
+        targetY = Math.max(Style.space(10), py - estH)
+      }
+      menuX = targetX
+      menuY = targetY
     }
 
     function hide() {
@@ -991,9 +998,9 @@ Item {
     BorderSurface {
       id: msgMenuBox
       x: msgContextMenu.menuX
-      y: msgContextMenu.menuY
-      width: Style.space(200)
-      implicitHeight: msgMenuCol.implicitHeight + Style.space(8)
+      y: Math.max(Style.space(8), Math.min(msgContextMenu.menuY, root.height - height - Style.space(8)))
+      width: Style.space(190)
+      height: msgMenuCol.implicitHeight + Style.space(8)
       radius: Style.cornerRadius
       color: Color.popups.background
       borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15), 1)
@@ -1384,7 +1391,7 @@ Item {
 
             Text {
               anchors.verticalCenter: parent.verticalCenter
-              text: "\uf2ed"
+              text: "\uf1f8"
               color: p.urgent
               font.family: p.fontFamily
               font.pixelSize: Style.font.caption
