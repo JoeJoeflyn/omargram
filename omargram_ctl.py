@@ -290,11 +290,20 @@ def search_files(query, root_dir="~", limit=60):
         try:
             cmd = [
                 "fd", "--type", "f",
-                "--max-results", str(limit * 2),
+                "--exclude", ".git",
+                "--exclude", "node_modules",
+                "--exclude", ".cache",
+                "--exclude", "__pycache__",
+                "--exclude", "target",
+                "--exclude", "dist",
+                "--exclude", ".cargo",
+                "--exclude", ".venv",
+                "--exclude", ".bundle",
+                "--max-results", str(limit),
                 query,
                 root
             ]
-            out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=2.0).decode("utf-8")
+            out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=1.5).decode("utf-8")
             paths = [p.strip() for p in out.splitlines() if p.strip()]
         except Exception:
             paths = []

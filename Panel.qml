@@ -1317,7 +1317,7 @@ Panel {
 
                 Timer {
                   id: searchDebounceTimer
-                  interval: 60
+                  interval: 180
                   repeat: false
                   onTriggered: root.searchPickerFiles(pickerSearchInput.text)
                 }
@@ -1499,6 +1499,11 @@ Panel {
                     anchors.fill: parent
                     source: (!modelData.is_dir && modelData.is_image) ? ("file://" + modelData.path) : ""
                     fillMode: Image.PreserveAspectCrop
+                    sourceSize.width: 64
+                    sourceSize.height: 64
+                    asynchronous: true
+                    cache: true
+                    smooth: true
                   }
 
                   Text {

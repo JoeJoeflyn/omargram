@@ -119,8 +119,11 @@ Item {
             anchors.fill: parent
             source: (p.attachedFile && p.attachedFile.isImage) ? p.attachedFile.preview : ""
             fillMode: Image.PreserveAspectCrop
+            sourceSize.width: 64
+            sourceSize.height: 64
+            asynchronous: true
+            cache: true
             smooth: true
-            mipmap: true
           }
 
           Text {
