@@ -275,6 +275,8 @@ Panel {
     }
   }
 
+  property string _lastChatsDigest: ""
+
   Process {
     id: dialogsProc
     command: ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "dialogs", "40"]
@@ -284,7 +286,11 @@ Panel {
         try {
           var d = JSON.parse(text || "{}")
           if (d.success && d.chats) {
-            root.allChats = d.chats
+            var digest = JSON.stringify(d.chats)
+            if (root._lastChatsDigest !== digest) {
+              root._lastChatsDigest = digest
+              root.allChats = d.chats
+            }
             root.unreadCount = d.unread_total || 0
           }
         } catch (e) {}

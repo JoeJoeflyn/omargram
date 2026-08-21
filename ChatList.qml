@@ -232,17 +232,12 @@ Item {
         required property var modelData
         required property int index
         readonly property bool isSelected: p.selectedChat && p.selectedChat.id === modelData.id
-        property bool isSnapping: false
 
         width: chatListView.width
-        height: isSnapping ? 0 : Style.space(56)
-        opacity: isSnapping ? 0.0 : 1.0
+        height: Style.space(56)
         radius: Style.cornerRadius
         color: isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.2) : (rowMouse.containsMouse ? Style.hoverFillFor(p.foreground, Color.accent) : "transparent")
         borderSpec: isSelected ? Border.flat(Color.accent, 1) : Border.none
-
-        Behavior on height { NumberAnimation { duration: 280; easing.type: Easing.InOutQuad } }
-        Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutQuad } }
 
         MouseArea {
           id: rowMouse
