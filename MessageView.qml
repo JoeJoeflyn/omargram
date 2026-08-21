@@ -184,46 +184,44 @@ Item {
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-    property real userScrollY: 0
-    property bool isRestoringScroll: false
+    property int lastVisibleIndex: 0
+    property bool isChatSwitching: false
 
-    onMovementEnded: {
-      if (!isRestoringScroll) userScrollY = contentY
-    }
-    onFlickEnded: {
-      if (!isRestoringScroll) userScrollY = contentY
-    }
+    onMovementEnded: updateVisibleIndex()
+    onFlickEnded: updateVisibleIndex()
     onContentYChanged: {
-      if (!isRestoringScroll) {
-        if (moving || flicking || contentY > 15) {
-          userScrollY = contentY
-        } else if (atYBeginning && contentY <= 5) {
-          userScrollY = 0
-        }
+      if (!isChatSwitching && (moving || flicking)) {
+        updateVisibleIndex()
+      }
+    }
+
+    function updateVisibleIndex() {
+      if (atYBeginning || contentY <= 15) {
+        lastVisibleIndex = 0
+      } else {
+        var idx = indexAt(width / 2, height / 2)
+        if (idx >= 0) lastVisibleIndex = idx
       }
     }
 
     Connections {
       target: p
       function onSelectedChatChanged() {
-        msgListView.isRestoringScroll = true
-        msgListView.userScrollY = 0
+        msgListView.isChatSwitching = true
+        msgListView.lastVisibleIndex = 0
         msgListView.contentY = 0
         Qt.callLater(function() {
           msgListView.contentY = 0
           msgListView.positionViewAtBeginning()
-          msgListView.isRestoringScroll = false
+          msgListView.isChatSwitching = false
         })
       }
       function onActiveMessagesChanged() {
-        if (msgListView.userScrollY > 15) {
-          msgListView.isRestoringScroll = true
-          msgListView.contentY = msgListView.userScrollY
+        if (!msgListView.isChatSwitching && msgListView.lastVisibleIndex > 0) {
           Qt.callLater(function() {
-            if (msgListView.userScrollY > 15) {
-              msgListView.contentY = msgListView.userScrollY
+            if (msgListView.lastVisibleIndex > 0 && msgListView.lastVisibleIndex < msgListView.count) {
+              msgListView.positionViewAtIndex(msgListView.lastVisibleIndex, ListView.Center)
             }
-            msgListView.isRestoringScroll = false
           })
         }
       }
@@ -496,6 +494,7 @@ Item {
                   hoverEnabled: true
                   cursorShape: Qt.PointingHandCursor
                   onClicked: {
+                    msgListView.lastVisibleIndex = msgRow.index
                     p.sendReaction(p.selectedChat.id, msgRow.modelData.id, modelData.emoticon)
                   }
                 }
@@ -737,6 +736,9 @@ Item {
                   hoverEnabled: true
                   cursorShape: Qt.PointingHandCursor
                   onClicked: {
+                    if (msgContextMenu.targetRow) {
+                      msgListView.lastVisibleIndex = msgContextMenu.targetRow.index
+                    }
                     if (msgContextMenu.targetMsg) {
                       p.sendReaction(p.selectedChat.id, msgContextMenu.targetMsg.id, modelData)
                     }
@@ -784,6 +786,9 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
+              if (msgContextMenu.targetRow) {
+                msgListView.lastVisibleIndex = msgContextMenu.targetRow.index
+              }
               if (msgContextMenu.targetMsg) {
                 p.sendReaction(p.selectedChat.id, msgContextMenu.targetMsg.id, "clear")
               }

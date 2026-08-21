@@ -494,9 +494,6 @@ Panel {
 
   Process {
     id: actionProc
-    onExited: function() {
-      root.refresh()
-    }
   }
 
   // Background Poll Timer
