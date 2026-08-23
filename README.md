@@ -4,7 +4,7 @@
 
 OmarGram lets you read and reply to your Telegram chats directly from the Omarchy status bar on the same screen, without needing to open a new window for Telegram. It is designed to be lightweight, snappy, and consume minimal RAM.
 
-<img width="950" height="745" alt="Unsaved Image 1" src="https://github.com/user-attachments/assets/40dca5ba-1c0d-4084-a1a2-89e6c8712729" />
+![''](preview.png)
 
 ---
 
