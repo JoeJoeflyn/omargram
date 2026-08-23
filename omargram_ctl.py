@@ -362,18 +362,31 @@ def main():
         print(json.dumps(send_daemon_cmd({"action": "dialogs", "limit": limit})))
     elif action == "messages":
         if len(sys.argv) < 3:
-            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py messages <chat_id> [limit]"}))
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py messages <chat_id> [limit] [topic_id]"}))
             sys.exit(1)
         chat_id = sys.argv[2]
         limit = int(sys.argv[3]) if len(sys.argv) > 3 else 50
-        print(json.dumps(send_daemon_cmd({"action": "messages", "chat_id": chat_id, "limit": limit})))
+        topic_id = sys.argv[4] if len(sys.argv) > 4 else None
+        cmd = {"action": "messages", "chat_id": chat_id, "limit": limit}
+        if topic_id:
+            cmd["topic_id"] = topic_id
+        print(json.dumps(send_daemon_cmd(cmd)))
     elif action == "send":
         if len(sys.argv) < 4:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py send <chat_id> <text>"}))
             sys.exit(1)
         chat_id = sys.argv[2]
-        text = " ".join(sys.argv[3:])
-        print(json.dumps(send_daemon_cmd({"action": "send", "chat_id": chat_id, "text": text})))
+        # Last arg is topic_id if it's a plain integer, otherwise it's part of the text
+        raw_args = sys.argv[3:]
+        topic_id = None
+        if raw_args and raw_args[-1].lstrip("-").isdigit():
+            topic_id = raw_args[-1]
+            raw_args = raw_args[:-1]
+        text = " ".join(raw_args)
+        cmd = {"action": "send", "chat_id": chat_id, "text": text}
+        if topic_id:
+            cmd["topic_id"] = topic_id
+        print(json.dumps(send_daemon_cmd(cmd)))
     elif action in ("send_file", "send_media"):
         if len(sys.argv) < 4:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py send_file <chat_id> <file_path> [caption] [reply_to]"}))
@@ -469,6 +482,9 @@ def main():
         print(json.dumps(send_daemon_cmd({"action": "send_reaction", "chat_id": chat_id, "message_id": msg_id, "emoticon": emoticon})))
     elif action == "start_qr":
         print(json.dumps(send_daemon_cmd({"action": "start_qr"})))
+    elif action in ("forum_topics", "topics"):
+        chat_id = sys.argv[2] if len(sys.argv) > 2 else ""
+        print(json.dumps(send_daemon_cmd({"action": "forum_topics", "chat_id": chat_id})))
     elif action == "send_code":
         phone = sys.argv[2] if len(sys.argv) > 2 else ""
         print(json.dumps(send_daemon_cmd({"action": "send_code", "phone": phone})))

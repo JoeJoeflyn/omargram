@@ -414,10 +414,77 @@ Item {
     }
   }
 
+  // 2b. Forum Topics Bar (shown only for forum supergroups)
+  Item {
+    id: topicsBar
+    visible: p.selectedChat && p.selectedChat.is_forum && p.forumTopics.length > 0
+    anchors.top: chatHeader.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: visible ? Style.space(34) : 0
+
+    Rectangle {
+      anchors.fill: parent
+      color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.03)
+    }
+
+    ListView {
+      id: topicsListView
+      anchors.fill: parent
+      anchors.leftMargin: Style.space(8)
+      anchors.rightMargin: Style.space(8)
+      orientation: ListView.Horizontal
+      spacing: Style.space(6)
+      clip: true
+      model: p.forumTopics
+
+      delegate: Item {
+        width: topicLabel.implicitWidth + Style.space(20)
+        height: topicsBar.height
+
+        property bool isActive: p.activeTopic && p.activeTopic.id === modelData.id
+
+        Rectangle {
+          anchors.centerIn: parent
+          width: parent.width
+          height: Style.space(22)
+          radius: Style.space(11)
+          color: isActive ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)
+          Behavior on color { ColorAnimation { duration: 120 } }
+
+          Text {
+            id: topicLabel
+            anchors.centerIn: parent
+            text: modelData.title
+            color: isActive ? "#ffffff" : p.foreground
+            font.family: p.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: isActive
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            maximumLineCount: 1
+          }
+        }
+
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: {
+            if (isActive) {
+              p.clearTopic()
+            } else {
+              p.selectTopic(modelData)
+            }
+          }
+        }
+      }
+    }
+  }
+
   // 3. Middle Messages Stream ListView (BottomToTop = latest message at index 0 pinned to bottom)
   ListView {
     id: msgListView
-    anchors.top: pinnedBanner.visible ? pinnedBanner.bottom : chatHeader.bottom
+    anchors.top: topicsBar.visible ? topicsBar.bottom : (pinnedBanner.visible ? pinnedBanner.bottom : chatHeader.bottom)
     anchors.topMargin: Style.space(6)
     anchors.bottom: p.selectMode ? multiSelectBar.top : composerComp.top
     anchors.bottomMargin: Style.space(6)

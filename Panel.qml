@@ -145,6 +145,9 @@ Panel {
     if (!chat) return
     root._lastMsgDigest = ""
     selectedChat = chat
+    // Reset topic state when switching chats
+    activeTopic = null
+    forumTopics = []
     if (messagesCache[chat.id]) {
       activeMessages = messagesCache[chat.id]
     } else {
@@ -152,6 +155,10 @@ Panel {
     }
     loadMessages(chat.id)
     markChatRead(chat.id)
+    // Auto-load topics for forum supergroups
+    if (chat.is_forum) {
+      loadForumTopics(chat.id)
+    }
   }
 
   function selectChatById(chatId) {
@@ -164,6 +171,47 @@ Panel {
   }
 
   property var replyingTo: null
+
+  // ---- Forum Topics
+  property var forumTopics: []
+  property var activeTopic: null   // null = no topic selected (show all / General)
+  property bool loadingTopics: false
+
+  Process {
+    id: topicsProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.loadingTopics = false
+        try {
+          var r = JSON.parse(text || "{}")
+          if (r.success && r.topics) {
+            root.forumTopics = r.topics
+          }
+        } catch(e) {}
+      }
+    }
+  }
+
+  function loadForumTopics(chatId) {
+    if (!chatId) return
+    loadingTopics = true
+    topicsProc.running = false
+    topicsProc.stdout = ""
+    topicsProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "topics", String(chatId)]
+    topicsProc.running = true
+    loadingTopics = false
+  }
+
+  function selectTopic(topic) {
+    activeTopic = topic
+    if (selectedChat) loadMessages(selectedChat.id)
+  }
+
+  function clearTopic() {
+    activeTopic = null
+    if (selectedChat) loadMessages(selectedChat.id)
+  }
 
   function replyToMessage(msg) {
     replyingTo = msg
@@ -481,7 +529,9 @@ Panel {
     if (!chatId) return
     loadingMessages = true
     messagesProc.running = false
-    messagesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "messages", String(chatId), "50"]
+    var args = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "messages", String(chatId), "50"]
+    if (activeTopic) args.push(String(activeTopic.id))
+    messagesProc.command = args
     messagesProc.running = true
   }
 
@@ -517,7 +567,9 @@ Panel {
 
     sendProc.running = false
     var repId = replyingTo ? String(replyingTo.id) : ""
-    sendProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send", String(cid), text]
+    var sendArgs = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send", String(cid), text]
+    if (activeTopic) sendArgs.push(String(activeTopic.id))
+    sendProc.command = sendArgs
     sendProc.running = true
     clearReply()
   }

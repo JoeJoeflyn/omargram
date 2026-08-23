@@ -42,6 +42,7 @@ try:
     from telethon.tl.functions.messages import DeleteChatUserRequest, ReportSpamRequest, SendReactionRequest
     from telethon.tl.functions.account import ReportPeerRequest
     import qrcode
+    from telethon.tl.functions.channels import GetForumTopicsRequest
 except ImportError as e:
     print(f"Required library missing: {e}", file=sys.stderr)
     sys.exit(1)
@@ -190,6 +191,7 @@ class OmarGramDaemon:
                 is_user = isinstance(ent, User)
                 is_group = isinstance(ent, (Chat, Channel)) and getattr(ent, "megagroup", False) or isinstance(ent, Chat)
                 is_channel = isinstance(ent, Channel) and not getattr(ent, "megagroup", False)
+                is_forum = isinstance(ent, Channel) and bool(getattr(ent, "forum", False))
 
                 unread = d.unread_count or 0
                 if not is_channel:
@@ -260,6 +262,7 @@ class OmarGramDaemon:
                     "is_user": is_user,
                     "is_group": is_group,
                     "is_channel": is_channel,
+                    "is_forum": is_forum,
                     "unread_count": unread,
                     "read_outbox_max_id": read_outbox_max_id,
                     "avatar": avatar_path,
@@ -296,13 +299,16 @@ class OmarGramDaemon:
         except Exception:
             pass
 
-    async def get_messages_for_chat(self, chat_id, limit=50):
+    async def get_messages_for_chat(self, chat_id, limit=50, topic_id=None):
         if not await self.client.is_user_authorized():
             return []
         try:
             cid = int(chat_id)
             entity = await self.client.get_entity(cid)
-            messages = await self.client.get_messages(entity, limit=limit)
+            kwargs = {"limit": limit}
+            if topic_id:
+                kwargs["reply_to"] = int(topic_id)
+            messages = await self.client.get_messages(entity, **kwargs)
             
             read_outbox_max_id = 0
             chat_title = getattr(entity, "first_name", "") or getattr(entity, "title", "User")
@@ -431,13 +437,16 @@ class OmarGramDaemon:
             print(f"Error fetching messages for {chat_id}: {e}", file=sys.stderr)
             return getattr(self, 'chat_messages_cache', {}).get(int(chat_id) if str(chat_id).isdigit() else 0, [])
 
-    async def send_message_to_chat(self, chat_id, text):
+    async def send_message_to_chat(self, chat_id, text, topic_id=None):
         if not await self.client.is_user_authorized():
             return {"success": False, "error": "Not authorized"}
         try:
             cid = int(chat_id)
             entity = await self.client.get_entity(cid)
-            sent = await self.client.send_message(entity, text)
+            kwargs = {}
+            if topic_id:
+                kwargs["reply_to"] = int(topic_id)
+            sent = await self.client.send_message(entity, text, **kwargs)
             asyncio.create_task(self.refresh_dialogs_cache())
             return {"success": True, "message_id": sent.id}
         except Exception as e:
@@ -691,7 +700,41 @@ class OmarGramDaemon:
             except Exception as e:
                 return {"success": False, "error": str(e)}
 
-        elif action == "dialogs":
+        elif action == "forum_topics":
+            chat_id = cmd_dict.get("chat_id")
+            if not chat_id:
+                return {"success": False, "error": "chat_id required"}
+            if not await self.client.is_user_authorized():
+                return {"success": False, "error": "Not authorized"}
+            try:
+                cid = int(chat_id)
+                entity = await self.client.get_entity(cid)
+                result = await self.client(GetForumTopicsRequest(
+                    channel=entity,
+                    offset_date=0,
+                    offset_id=0,
+                    offset_topic=0,
+                    limit=100,
+                    q=""
+                ))
+                topics = []
+                for t in result.topics:
+                    topics.append({
+                        "id": t.id,
+                        "title": getattr(t, "title", "General"),
+                        "unread_count": getattr(t, "unread_count", 0),
+                        "is_general": getattr(t, "id", 0) == 1,
+                        "icon_emoji": getattr(t, "icon_emoji_id", None) and "💬" or ("📌" if getattr(t, "pinned", False) else "💬"),
+                        "pinned": bool(getattr(t, "pinned", False)),
+                        "closed": bool(getattr(t, "closed", False)),
+                    })
+                # Pinned first, then by id
+                topics.sort(key=lambda x: (not x["pinned"], x["id"]))
+                return {"success": True, "chat_id": chat_id, "topics": topics}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        if action == "dialogs":
             lim = int(cmd_dict.get("limit", 40))
             chats = await self.refresh_dialogs_cache(lim)
             return {"success": True, "chats": chats, "unread_total": self.unread_total}
@@ -701,13 +744,15 @@ class OmarGramDaemon:
             lim = int(cmd_dict.get("limit", 50))
             if not chat_id:
                 return {"success": False, "error": "chat_id required"}
-            msgs = await self.get_messages_for_chat(chat_id, lim)
+            topic_id = cmd_dict.get("topic_id")
+            msgs = await self.get_messages_for_chat(chat_id, lim, topic_id=topic_id)
             return {"success": True, "chat_id": chat_id, "messages": msgs}
 
         elif action == "send":
             chat_id = cmd_dict.get("chat_id")
             text = cmd_dict.get("text", "")
-            return await self.send_message_to_chat(chat_id, text)
+            topic_id = cmd_dict.get("topic_id")
+            return await self.send_message_to_chat(chat_id, text, topic_id=topic_id)
 
         elif action in ("send_file", "send_media"):
             chat_id = cmd_dict.get("chat_id")
