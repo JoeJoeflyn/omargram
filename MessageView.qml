@@ -417,7 +417,7 @@ Item {
   // 2b. Forum Topics Bar (shown only for forum supergroups)
   Item {
     id: topicsBar
-    visible: p.selectedChat && p.selectedChat.is_forum && p.forumTopics.length > 0
+    visible: p.selectedChat && p.forumTopics.length > 0
     anchors.top: chatHeader.bottom
     anchors.left: parent.left
     anchors.right: parent.right
