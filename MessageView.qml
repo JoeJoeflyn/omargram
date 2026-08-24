@@ -268,7 +268,7 @@ Item {
     visible: !p.selectMode
     p: root.p
     anchors.bottom: parent.bottom
-    anchors.left: parent.left
+    anchors.left: (topicsBar.visible && p.topicSidebar) ? topicsBar.right : parent.left
     anchors.right: parent.right
     anchors.bottomMargin: Style.space(4)
   }
@@ -414,47 +414,64 @@ Item {
     }
   }
 
-  // 2b. Forum Topics Bar (shown only for forum supergroups)
+  // 2b. Forum Topics — sidebar (left column) or bar (horizontal strip)
   Item {
     id: topicsBar
     visible: p.selectedChat && p.forumTopics.length > 0
+
+    // Sidebar mode: left column, full height below header
     anchors.top: chatHeader.bottom
     anchors.left: parent.left
-    anchors.right: parent.right
-    height: visible ? Style.space(34) : 0
+    anchors.bottom: p.topicSidebar ? parent.bottom : undefined
+    anchors.right: p.topicSidebar ? undefined : parent.right
+    width: p.topicSidebar ? (visible ? Style.space(160) : 0) : parent.width
+    height: p.topicSidebar ? undefined : (visible ? Style.space(34) : 0)
+
+    Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
     Rectangle {
       anchors.fill: parent
-      color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.03)
+      color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.04)
+      Rectangle {
+        // right border in sidebar mode
+        visible: p.topicSidebar
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 1
+        color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)
+      }
     }
 
     ListView {
       id: topicsListView
       anchors.fill: parent
-      anchors.leftMargin: Style.space(8)
-      anchors.rightMargin: Style.space(8)
-      orientation: ListView.Horizontal
-      spacing: Style.space(6)
+      anchors.margins: Style.space(6)
+      orientation: p.topicSidebar ? ListView.Vertical : ListView.Horizontal
+      spacing: Style.space(4)
       clip: true
       model: p.forumTopics
 
       delegate: Item {
-        width: topicLabel.implicitWidth + Style.space(20)
-        height: topicsBar.height
+        width: p.topicSidebar ? topicsListView.width : (topicLabel.implicitWidth + Style.space(20))
+        height: p.topicSidebar ? Style.space(28) : topicsBar.height - Style.space(12)
 
         property bool isActive: p.activeTopic && p.activeTopic.id === modelData.id
 
         Rectangle {
-          anchors.centerIn: parent
-          width: parent.width
-          height: Style.space(22)
-          radius: Style.space(11)
-          color: isActive ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)
+          anchors.fill: parent
+          anchors.margins: p.topicSidebar ? 0 : Style.space(1)
+          radius: p.topicSidebar ? Style.space(6) : height / 2
+          color: isActive ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.0)
           Behavior on color { ColorAnimation { duration: 120 } }
 
           Text {
             id: topicLabel
-            anchors.centerIn: parent
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: Style.space(8)
+            anchors.rightMargin: Style.space(8)
             text: modelData.title
             color: isActive ? "#ffffff" : p.foreground
             font.family: p.fontFamily
@@ -484,11 +501,11 @@ Item {
   // 3. Middle Messages Stream ListView (BottomToTop = latest message at index 0 pinned to bottom)
   ListView {
     id: msgListView
-    anchors.top: topicsBar.visible ? topicsBar.bottom : (pinnedBanner.visible ? pinnedBanner.bottom : chatHeader.bottom)
+    anchors.top: (topicsBar.visible && !p.topicSidebar) ? topicsBar.bottom : (pinnedBanner.visible ? pinnedBanner.bottom : chatHeader.bottom)
     anchors.topMargin: Style.space(6)
     anchors.bottom: p.selectMode ? multiSelectBar.top : composerComp.top
     anchors.bottomMargin: Style.space(6)
-    anchors.left: parent.left
+    anchors.left: (topicsBar.visible && p.topicSidebar) ? topicsBar.right : parent.left
     anchors.right: parent.right
     clip: true
     spacing: Style.space(8)

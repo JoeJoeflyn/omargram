@@ -172,8 +172,9 @@ Panel {
 
   // ---- Forum Topics
   property var forumTopics: []
-  property var activeTopic: null   // null = no topic selected (show all / General)
+  property var activeTopic: null
   property bool loadingTopics: false
+  readonly property bool topicSidebar: (settings && settings.topicLayout) ? settings.topicLayout === "sidebar" : true
 
   Process {
     id: topicsProc
