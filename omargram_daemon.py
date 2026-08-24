@@ -192,6 +192,9 @@ class OmarGramDaemon:
                 is_group = isinstance(ent, (Chat, Channel)) and getattr(ent, "megagroup", False) or isinstance(ent, Chat)
                 is_channel = isinstance(ent, Channel) and not getattr(ent, "megagroup", False)
                 is_forum = isinstance(ent, Channel) and bool(getattr(ent, "forum", False))
+                # For bot DMs (User entities), we can't know upfront — mark as maybe_forum
+                # and let the QML probe it
+                maybe_forum = is_forum or (is_user and getattr(ent, "bot", False))
 
                 unread = d.unread_count or 0
                 if not is_channel:
@@ -262,7 +265,7 @@ class OmarGramDaemon:
                     "is_user": is_user,
                     "is_group": is_group,
                     "is_channel": is_channel,
-                    "is_forum": is_forum,
+                    "is_forum": is_forum or maybe_forum,
                     "unread_count": unread,
                     "read_outbox_max_id": read_outbox_max_id,
                     "avatar": avatar_path,
@@ -732,7 +735,8 @@ class OmarGramDaemon:
                 topics.sort(key=lambda x: (not x["pinned"], x["id"]))
                 return {"success": True, "chat_id": chat_id, "topics": topics}
             except Exception as e:
-                return {"success": False, "error": str(e)}
+                # Not a forum or topics not supported — return empty gracefully
+                return {"success": True, "chat_id": chat_id, "topics": []}
 
         if action == "dialogs":
             lim = int(cmd_dict.get("limit", 40))

@@ -155,10 +155,8 @@ Panel {
     }
     loadMessages(chat.id)
     markChatRead(chat.id)
-    // Auto-load topics for forum supergroups
-    if (chat.is_forum) {
-      loadForumTopics(chat.id)
-    }
+    // Probe for topics on any chat — bar only shows if topics come back
+    loadForumTopics(chat.id)
   }
 
   function selectChatById(chatId) {
