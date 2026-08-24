@@ -87,6 +87,33 @@ def stop_daemon():
             pass
     return {"success": True}
 
+def find_python():
+    """Find a python3 that has telethon installed."""
+    # 1. Check common venv locations relative to the plugin dir
+    plugin_dir = os.path.dirname(os.path.realpath(__file__))
+    home = os.path.expanduser("~")
+    candidates = [
+        os.path.join(home, ".venv", "omargram", "bin", "python3"),
+        os.path.join(home, ".venv", "bin", "python3"),
+        os.path.join(home, ".local", "pipx", "venvs", "telethon", "bin", "python3"),
+        os.path.join(plugin_dir, ".venv", "bin", "python3"),
+        sys.executable,
+    ]
+    for py in candidates:
+        if os.path.exists(py):
+            try:
+                result = subprocess.run(
+                    [py, "-c", "import telethon"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                if result.returncode == 0:
+                    return py
+            except Exception:
+                pass
+    return sys.executable
+
+DAEMON_PYTHON = find_python()
+
 def ensure_daemon_running():
     if is_daemon_running():
         return True
@@ -98,7 +125,7 @@ def ensure_daemon_running():
     daemon_script = get_daemon_script_path()
     try:
         subprocess.Popen(
-            [sys.executable, daemon_script],
+            [DAEMON_PYTHON, daemon_script],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True
