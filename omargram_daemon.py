@@ -710,8 +710,8 @@ class OmarGramDaemon:
                 cid = int(chat_id)
                 entity = await self.client.get_entity(cid)
                 result = await self.client(functions.messages.GetForumTopicsRequest(
-                    channel=entity,
-                    offset_date=0,
+                    peer=entity,
+                    offset_date=None,
                     offset_id=0,
                     offset_topic=0,
                     limit=100,
