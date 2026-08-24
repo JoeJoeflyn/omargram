@@ -42,7 +42,7 @@ try:
     from telethon.tl.functions.messages import DeleteChatUserRequest, ReportSpamRequest, SendReactionRequest
     from telethon.tl.functions.account import ReportPeerRequest
     import qrcode
-    from telethon.tl.functions.channels import GetForumTopicsRequest
+
 except ImportError as e:
     print(f"Required library missing: {e}", file=sys.stderr)
     sys.exit(1)
@@ -709,7 +709,7 @@ class OmarGramDaemon:
             try:
                 cid = int(chat_id)
                 entity = await self.client.get_entity(cid)
-                result = await self.client(GetForumTopicsRequest(
+                result = await self.client(functions.messages.GetForumTopicsRequest(
                     channel=entity,
                     offset_date=0,
                     offset_id=0,
