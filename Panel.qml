@@ -195,10 +195,8 @@ Panel {
     if (!chatId) return
     loadingTopics = true
     topicsProc.running = false
-    topicsProc.stdout = ""
-    topicsProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "topics", String(chatId)]
+    topicsProc.command = ["/home/matt/.venv/omargram/bin/python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "topics", String(chatId)]
     topicsProc.running = true
-    loadingTopics = false
   }
 
   function selectTopic(topic) {
