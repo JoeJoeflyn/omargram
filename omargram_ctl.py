@@ -397,7 +397,8 @@ def main():
         cmd = {"action": "messages", "chat_id": chat_id, "limit": limit}
         if topic_id:
             cmd["topic_id"] = topic_id
-        print(json.dumps(send_daemon_cmd(cmd)))
+        result = send_daemon_cmd(cmd)
+        print(json.dumps(result))
     elif action == "send":
         if len(sys.argv) < 4:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py send <chat_id> <text>"}))
@@ -431,10 +432,14 @@ def main():
         })))
     elif action == "mark_read":
         if len(sys.argv) < 3:
-            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py mark_read <chat_id>"}))
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py mark_read <chat_id> [topic_id]"}))
             sys.exit(1)
         chat_id = sys.argv[2]
-        print(json.dumps(send_daemon_cmd({"action": "mark_read", "chat_id": chat_id})))
+        topic_id = sys.argv[3] if len(sys.argv) > 3 else None
+        cmd = {"action": "mark_read", "chat_id": chat_id}
+        if topic_id:
+            cmd["topic_id"] = topic_id
+        print(json.dumps(send_daemon_cmd(cmd)))
     elif action == "delete_chat":
         if len(sys.argv) < 3:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py delete_chat <chat_id>"}))

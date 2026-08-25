@@ -34,7 +34,7 @@ Item {
       height: Style.space(26)
       radius: Style.space(6)
       color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.06)
-      borderSpec: Border.leftSpec(Color.accent, 2)
+      borderSpec: Border.flat(Color.accent, "0 0 0 2")
 
       Row {
         anchors.fill: parent

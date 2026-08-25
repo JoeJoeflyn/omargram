@@ -45,6 +45,7 @@ Panel {
   property var selectedChat: null
   property var activeMessages: []
   property bool loadingMessages: false
+  property bool messagesLoaded: false
 
   property var editingMessage: null
   property bool selectMode: false
@@ -136,27 +137,77 @@ Panel {
   function refresh() {
     if (!statusProc.running) statusProc.running = true
     if (!dialogsProc.running) dialogsProc.running = true
-    if (selectedChat) loadMessages(selectedChat.id)
+    // Background refresh — don't show loading spinner
+    if (selectedChat) {
+      _loadingChatKey = String(selectedChat.id) + (activeTopic ? "_" + String(activeTopic.id) : "")
+      messagesProc.running = false
+      var args = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "messages", String(selectedChat.id), "50"]
+      if (activeTopic) args.push(String(activeTopic.id))
+      messagesProc.command = args
+      messagesProc.running = true
+    }
   }
 
   property var messagesCache: ({})
 
   function selectChat(chat) {
     if (!chat) return
-    root._lastMsgDigest = ""
+    // Same chat clicked — just reopen topic list for forum chats
+    if (selectedChat && selectedChat.id === chat.id) {
+      if (chat.is_forum) {
+        activeTopic = null
+        if (topicsCache[String(chat.id)]) {
+          forumTopics = topicsCache[String(chat.id)]
+          // Restore previous topic or select first
+          if (forumTopics.length > 0) {
+            var lastId = lastTopicPerChat[String(chat.id)]
+            var found = null
+            if (lastId) {
+              for (var i = 0; i < forumTopics.length; i++) {
+                if (forumTopics[i].id === lastId) { found = forumTopics[i]; break }
+              }
+            }
+            selectTopic(found || forumTopics[0])
+          }
+        }
+        loadForumTopics(chat.id)
+      }
+      return
+    }
     selectedChat = chat
-    // Reset topic state when switching chats
     activeTopic = null
-    forumTopics = []
-    if (messagesCache[chat.id]) {
-      activeMessages = messagesCache[chat.id]
+    // Show cached topics instantly and restore previous topic
+    if (chat.is_forum && topicsCache[String(chat.id)]) {
+      forumTopics = topicsCache[String(chat.id)]
+      if (forumTopics.length > 0) {
+        var lastId2 = lastTopicPerChat[String(chat.id)]
+        var found2 = null
+        if (lastId2) {
+          for (var j = 0; j < forumTopics.length; j++) {
+            if (forumTopics[j].id === lastId2) { found2 = forumTopics[j]; break }
+          }
+        }
+        selectTopic(found2 || forumTopics[0])
+      }
+    } else {
+      forumTopics = []
+    }
+    // Show cached messages instantly if available
+    var cacheKey = String(chat.id)
+    if (messagesCache[cacheKey]) {
+      activeMessages = messagesCache[cacheKey]
+      loadingMessages = false
+      messagesLoaded = true
     } else {
       activeMessages = []
+      loadingMessages = true
+      messagesLoaded = false
     }
     loadMessages(chat.id)
     markChatRead(chat.id)
-    // Probe for topics on any chat — bar only shows if topics come back
-    loadForumTopics(chat.id)
+    if (chat.is_forum && (chat.is_group || chat.is_channel)) {
+      loadForumTopics(chat.id)
+    }
   }
 
   function selectChatById(chatId) {
@@ -174,6 +225,8 @@ Panel {
   property var forumTopics: []
   property var activeTopic: null
   property bool loadingTopics: false
+  property var topicsCache: ({})
+  property var lastTopicPerChat: ({})
   readonly property bool topicSidebar: (settings && settings.topicLayout) ? settings.topicLayout === "sidebar" : true
 
   Process {
@@ -186,6 +239,21 @@ Panel {
           var r = JSON.parse(text || "{}")
           if (r.success && r.topics) {
             root.forumTopics = r.topics
+            if (root.selectedChat) {
+              var chatKey = String(root.selectedChat.id)
+              root.topicsCache[chatKey] = r.topics
+              // Auto-select: restore previous topic, or select first
+              if (!root.activeTopic && r.topics.length > 0) {
+                var lastId = root.lastTopicPerChat[chatKey]
+                var found = null
+                if (lastId) {
+                  for (var i = 0; i < r.topics.length; i++) {
+                    if (r.topics[i].id === lastId) { found = r.topics[i]; break }
+                  }
+                }
+                root.selectTopic(found || r.topics[0])
+              }
+            }
           }
         } catch(e) {}
       }
@@ -194,19 +262,59 @@ Panel {
 
   function loadForumTopics(chatId) {
     if (!chatId) return
-    loadingTopics = true
+    // Show cached topics instantly
+    var cacheKey = String(chatId)
+    if (topicsCache[cacheKey]) {
+      forumTopics = topicsCache[cacheKey]
+      loadingTopics = false
+    } else {
+      loadingTopics = true
+    }
+    // Refresh in background
     topicsProc.running = false
-    topicsProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "topics", String(chatId)]
+    topicsProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "topics", String(chatId)]
     topicsProc.running = true
   }
 
   function selectTopic(topic) {
     activeTopic = topic
-    if (selectedChat) loadMessages(selectedChat.id)
+    if (selectedChat) {
+      lastTopicPerChat[String(selectedChat.id)] = topic.id
+    }
+    var cacheKey = String(selectedChat.id) + "_" + String(topic.id)
+    if (messagesCache[cacheKey]) {
+      activeMessages = messagesCache[cacheKey]
+      loadingMessages = false
+      messagesLoaded = true
+    } else {
+      activeMessages = []
+      loadingMessages = true
+      messagesLoaded = false
+    }
+    if (selectedChat) {
+      loadMessages(selectedChat.id)
+      markChatRead(selectedChat.id)
+    }
   }
 
   function clearTopic() {
     activeTopic = null
+    var cacheKey = String(selectedChat.id)
+    if (messagesCache[cacheKey]) {
+      activeMessages = messagesCache[cacheKey]
+      loadingMessages = false
+      messagesLoaded = true
+    } else {
+      activeMessages = []
+      loadingMessages = true
+      messagesLoaded = false
+    }
+    if (selectedChat) loadMessages(selectedChat.id)
+  }
+
+  function clearTopicSelection() {
+    activeTopic = null
+    forumTopics = []
     if (selectedChat) loadMessages(selectedChat.id)
   }
 
@@ -238,7 +346,7 @@ Panel {
   function deleteChat(chatId) {
     if (!chatId) return
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "delete_chat", String(chatId)]
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "delete_chat", String(chatId)]
     actionProc.running = true
 
     allChats = allChats.filter(function(c) { return c.id !== chatId })
@@ -251,7 +359,7 @@ Panel {
   function leaveChat(chatId) {
     if (!chatId) return
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "leave_chat", String(chatId)]
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "leave_chat", String(chatId)]
     actionProc.running = true
 
     allChats = allChats.filter(function(c) { return c.id !== chatId })
@@ -264,7 +372,7 @@ Panel {
   function reportSpamAndLeave(chatId) {
     if (!chatId) return
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "report_spam", String(chatId)]
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "report_spam", String(chatId)]
     actionProc.running = true
 
     allChats = allChats.filter(function(c) { return c.id !== chatId })
@@ -277,7 +385,7 @@ Panel {
   function deleteMessage(chatId, messageId) {
     if (!chatId || !messageId) return
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "delete_message", String(chatId), String(messageId)]
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "delete_message", String(chatId), String(messageId)]
     actionProc.running = true
 
     // Optimistically remove message from list and cache
@@ -302,7 +410,7 @@ Panel {
     editingMessage = null
 
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "edit", String(chatId), String(messageId), newText]
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "edit", String(chatId), String(messageId), newText]
     actionProc.running = true
 
     // Optimistically update message text in cache and activeMessages
@@ -325,7 +433,7 @@ Panel {
   function pinMessage(chatId, messageId) {
     if (!chatId || !messageId) return
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "pin", String(chatId), String(messageId)]
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "pin", String(chatId), String(messageId)]
     actionProc.running = true
 
     var updated = []
@@ -343,7 +451,7 @@ Panel {
     actionProc.running = false
     var args = ["unpin", String(chatId)]
     if (messageId) args.push(String(messageId))
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", "")].concat(args)
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", "")].concat(args)
     actionProc.running = true
 
     var updated = []
@@ -390,7 +498,7 @@ Panel {
 
     actionProc.running = false
     var args = ["delete_batch", String(cid)].concat(toDelete.map(String))
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", "")].concat(args)
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", "")].concat(args)
     actionProc.running = true
 
     activeMessages = activeMessages.filter(function(m) { return toDelete.indexOf(m.id) < 0 })
@@ -434,7 +542,7 @@ Panel {
 
     actionProc.running = false
     var args = ["forward", String(fromCid), String(toChatId)].concat(ids.map(String))
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", "")].concat(args)
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", "")].concat(args)
     actionProc.running = true
 
     closeForwardDialog()
@@ -456,7 +564,7 @@ Panel {
   function sendReactionBackend(chatId, messageId, emoticon) {
     if (!chatId || !messageId) return
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "reaction", String(chatId), String(messageId), emoticon || "clear"]
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "reaction", String(chatId), String(messageId), emoticon || "clear"]
     actionProc.running = true
   }
 
@@ -484,7 +592,7 @@ Panel {
     var targetEmoticon = isRemoving ? "clear" : (normInput || "👍")
 
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "reaction", String(chatId), String(messageId), targetEmoticon]
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "reaction", String(chatId), String(messageId), targetEmoticon]
     actionProc.running = true
 
     // Optimistically update message reaction in cache ONLY (do not reassign activeMessages to avoid ListView scroll resets)
@@ -524,9 +632,13 @@ Panel {
 
   function loadMessages(chatId) {
     if (!chatId) return
-    loadingMessages = true
+    _loadingChatKey = String(chatId) + (activeTopic ? "_" + String(activeTopic.id) : "")
+    // Only show spinner if no cached messages
+    if (!messagesCache[_loadingChatKey]) {
+      loadingMessages = true
+    }
     messagesProc.running = false
-    var args = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "messages", String(chatId), "50"]
+    var args = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "messages", String(chatId), "50"]
     if (activeTopic) args.push(String(activeTopic.id))
     messagesProc.command = args
     messagesProc.running = true
@@ -564,7 +676,7 @@ Panel {
 
     sendProc.running = false
     var repId = replyingTo ? String(replyingTo.id) : ""
-    var sendArgs = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send", String(cid), text]
+    var sendArgs = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "send", String(cid), text]
     if (activeTopic) sendArgs.push(String(activeTopic.id))
     sendProc.command = sendArgs
     sendProc.running = true
@@ -605,7 +717,7 @@ Panel {
     filePickerTab = tab
     pickerSearchQuery = ""
     pickerFilesProc.running = false
-    pickerFilesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "list_files", tab]
+    pickerFilesProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "list_files", tab]
     pickerFilesProc.running = true
   }
 
@@ -632,7 +744,7 @@ Panel {
     // 2. If recursive search mode is enabled, run background fd search across subfolders
     if (root.searchRecursive) {
       searchFilesProc.running = false
-      searchFilesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "search", query.trim(), filePickerTab]
+      searchFilesProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "search", query.trim(), filePickerTab]
       searchFilesProc.running = true
     }
   }
@@ -641,7 +753,7 @@ Panel {
     if (!pickerSearchQuery || pickerSearchQuery.trim() === "") return
     searchRecursive = true
     searchFilesProc.running = false
-    searchFilesProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "search", pickerSearchQuery.trim(), filePickerTab]
+    searchFilesProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "search", pickerSearchQuery.trim(), filePickerTab]
     searchFilesProc.running = true
   }
 
@@ -696,7 +808,7 @@ Panel {
 
     sendProc.running = false
     var repId = replyingTo ? String(replyingTo.id) : ""
-    var cmd = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send_file", String(cid), filePath]
+    var cmd = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "send_file", String(cid), filePath]
     if (caption) cmd.push(caption)
     else if (repId) cmd.push("")
     if (repId) cmd.push(repId)
@@ -709,7 +821,9 @@ Panel {
   function markChatRead(chatId) {
     if (!chatId) return
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "mark_read", String(chatId)]
+    var args = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "mark_read", String(chatId)]
+    if (activeTopic) args.push(String(activeTopic.id))
+    actionProc.command = args
     actionProc.running = true
 
     var updated = []
@@ -719,17 +833,28 @@ Panel {
       updated.push(c)
     }
     allChats = updated
+
+    // Clear topic unread count
+    if (activeTopic && forumTopics.length > 0) {
+      var topics = []
+      for (var j = 0; j < forumTopics.length; j++) {
+        var t = Object.assign({}, forumTopics[j])
+        if (t.id === activeTopic.id) t.unread_count = 0
+        topics.push(t)
+      }
+      forumTopics = topics
+    }
   }
 
   function startQrLogin() {
     qrProc.running = false
-    qrProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "start_qr"]
+    qrProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "start_qr"]
     qrProc.running = true
   }
 
   function sendPhoneCode(phone) {
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "send_code", phone]
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "send_code", phone]
     actionProc.running = true
   }
 
@@ -737,13 +862,13 @@ Panel {
     actionProc.running = false
     var args = ["submit_code", code]
     if (pwd) args.push(pwd)
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", "")].concat(args)
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", "")].concat(args)
     actionProc.running = true
   }
 
   function logout() {
     actionProc.running = false
-    actionProc.command = ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "logout"]
+    actionProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "logout"]
     actionProc.running = true
     isAuthorized = false
     selectedChat = null
@@ -755,7 +880,7 @@ Panel {
   // ---- Processes
   Process {
     id: statusProc
-    command: ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "status"]
+    command: [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "status"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -784,7 +909,7 @@ Panel {
 
   Process {
     id: dialogsProc
-    command: ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "dialogs", "40"]
+    command: [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "dialogs", "40"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -804,28 +929,29 @@ Panel {
   }
 
   property string _lastMsgDigest: ""
+  property string _loadingChatKey: ""
+
 
   Process {
     id: messagesProc
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        root.loadingMessages = false
         try {
           var d = JSON.parse(text || "{}")
           if (d.success && d.messages && d.chat_id) {
-            root.messagesCache[d.chat_id] = d.messages
-            if (root.selectedChat && String(root.selectedChat.id) === String(d.chat_id)) {
-              var curr = root.activeMessages || []
-              var incoming = d.messages || []
-              var isChanged = (curr.length === 0) || (curr.length !== incoming.length) || (incoming.length > 0 && curr.length > 0 && incoming[0].id !== curr[0].id)
-              if (isChanged) {
-                root._lastMsgDigest = JSON.stringify(incoming)
-                root.activeMessages = incoming
-              }
+            var respKey = String(d.chat_id) + (root.activeTopic ? "_" + String(root.activeTopic.id) : "")
+            root.messagesCache[respKey] = d.messages
+            // Only update if this response is for the chat we're currently viewing
+            if (root.selectedChat && respKey === root._loadingChatKey) {
+              root._lastMsgDigest = JSON.stringify(d.messages || [])
+              root.activeMessages = d.messages || []
+              root.messagesLoaded = true
+              root.loadingMessages = false
             }
           }
-        } catch (e) {}
+        } catch (e) {
+        }
       }
     }
   }
@@ -867,7 +993,7 @@ Panel {
 
   Process {
     id: pasteImageProc
-    command: ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "paste_image"]
+    command: [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "paste_image"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -883,7 +1009,7 @@ Panel {
 
   Process {
     id: pickFileProc
-    command: ["python3", Qt.resolvedUrl("omargram_ctl.py").toString().replace("file://", ""), "pick_file"]
+    command: [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "pick_file"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -1076,6 +1202,12 @@ Panel {
               id: messageViewComp
               visible: root.selectedChat !== null
               p: root
+              // Reset pinned index only when chat or topic changes
+              Connections {
+                target: root
+                function onSelectedChatChanged() { messageViewComp.pinnedIndex = 0 }
+                function onActiveTopicChanged() { messageViewComp.pinnedIndex = 0 }
+              }
             }
           }
         }
