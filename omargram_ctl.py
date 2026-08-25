@@ -87,6 +87,33 @@ def stop_daemon():
             pass
     return {"success": True}
 
+def find_python():
+    """Find a python3 that has telethon installed."""
+    # 1. Check common venv locations relative to the plugin dir
+    plugin_dir = os.path.dirname(os.path.realpath(__file__))
+    home = os.path.expanduser("~")
+    candidates = [
+        os.path.join(home, ".venv", "omargram", "bin", "python3"),
+        os.path.join(home, ".venv", "bin", "python3"),
+        os.path.join(home, ".local", "pipx", "venvs", "telethon", "bin", "python3"),
+        os.path.join(plugin_dir, ".venv", "bin", "python3"),
+        sys.executable,
+    ]
+    for py in candidates:
+        if os.path.exists(py):
+            try:
+                result = subprocess.run(
+                    [py, "-c", "import telethon"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                if result.returncode == 0:
+                    return py
+            except Exception:
+                pass
+    return sys.executable
+
+DAEMON_PYTHON = find_python()
+
 def ensure_daemon_running():
     if is_daemon_running():
         return True
@@ -98,7 +125,7 @@ def ensure_daemon_running():
     daemon_script = get_daemon_script_path()
     try:
         subprocess.Popen(
-            [sys.executable, daemon_script],
+            [DAEMON_PYTHON, daemon_script],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True
@@ -362,18 +389,32 @@ def main():
         print(json.dumps(send_daemon_cmd({"action": "dialogs", "limit": limit})))
     elif action == "messages":
         if len(sys.argv) < 3:
-            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py messages <chat_id> [limit]"}))
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py messages <chat_id> [limit] [topic_id]"}))
             sys.exit(1)
         chat_id = sys.argv[2]
         limit = int(sys.argv[3]) if len(sys.argv) > 3 else 50
-        print(json.dumps(send_daemon_cmd({"action": "messages", "chat_id": chat_id, "limit": limit})))
+        topic_id = sys.argv[4] if len(sys.argv) > 4 else None
+        cmd = {"action": "messages", "chat_id": chat_id, "limit": limit}
+        if topic_id:
+            cmd["topic_id"] = topic_id
+        result = send_daemon_cmd(cmd)
+        print(json.dumps(result))
     elif action == "send":
         if len(sys.argv) < 4:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py send <chat_id> <text>"}))
             sys.exit(1)
         chat_id = sys.argv[2]
-        text = " ".join(sys.argv[3:])
-        print(json.dumps(send_daemon_cmd({"action": "send", "chat_id": chat_id, "text": text})))
+        # Last arg is topic_id if it's a plain integer, otherwise it's part of the text
+        raw_args = sys.argv[3:]
+        topic_id = None
+        if raw_args and raw_args[-1].lstrip("-").isdigit():
+            topic_id = raw_args[-1]
+            raw_args = raw_args[:-1]
+        text = " ".join(raw_args)
+        cmd = {"action": "send", "chat_id": chat_id, "text": text}
+        if topic_id:
+            cmd["topic_id"] = topic_id
+        print(json.dumps(send_daemon_cmd(cmd)))
     elif action in ("send_file", "send_media"):
         if len(sys.argv) < 4:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py send_file <chat_id> <file_path> [caption] [reply_to]"}))
@@ -391,10 +432,14 @@ def main():
         })))
     elif action == "mark_read":
         if len(sys.argv) < 3:
-            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py mark_read <chat_id>"}))
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py mark_read <chat_id> [topic_id]"}))
             sys.exit(1)
         chat_id = sys.argv[2]
-        print(json.dumps(send_daemon_cmd({"action": "mark_read", "chat_id": chat_id})))
+        topic_id = sys.argv[3] if len(sys.argv) > 3 else None
+        cmd = {"action": "mark_read", "chat_id": chat_id}
+        if topic_id:
+            cmd["topic_id"] = topic_id
+        print(json.dumps(send_daemon_cmd(cmd)))
     elif action == "delete_chat":
         if len(sys.argv) < 3:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py delete_chat <chat_id>"}))
@@ -469,6 +514,9 @@ def main():
         print(json.dumps(send_daemon_cmd({"action": "send_reaction", "chat_id": chat_id, "message_id": msg_id, "emoticon": emoticon})))
     elif action == "start_qr":
         print(json.dumps(send_daemon_cmd({"action": "start_qr"})))
+    elif action in ("forum_topics", "topics"):
+        chat_id = sys.argv[2] if len(sys.argv) > 2 else ""
+        print(json.dumps(send_daemon_cmd({"action": "forum_topics", "chat_id": chat_id})))
     elif action == "send_code":
         phone = sys.argv[2] if len(sys.argv) > 2 else ""
         print(json.dumps(send_daemon_cmd({"action": "send_code", "phone": phone})))

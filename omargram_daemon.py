@@ -37,11 +37,12 @@ for d in (CONFIG_DIR, CACHE_DIR, AVATARS_DIR, MEDIA_DIR, OMARGRAM_RUN_DIR):
 
 try:
     from telethon import TelegramClient, events, functions, types
-    from telethon.tl.types import User, Chat, Channel, MessageMediaPhoto, MessageMediaDocument, MessageMediaWebPage, WebPage, InputReportReasonSpam, ReactionEmoji
+    from telethon.tl.types import User, Chat, Channel, MessageMediaPhoto, MessageMediaDocument, MessageMediaWebPage, WebPage, WebPagePending, WebPageEmpty, InputReportReasonSpam, ReactionEmoji
     from telethon.tl.functions.channels import LeaveChannelRequest
     from telethon.tl.functions.messages import DeleteChatUserRequest, ReportSpamRequest, SendReactionRequest
     from telethon.tl.functions.account import ReportPeerRequest
     import qrcode
+
 except ImportError as e:
     print(f"Required library missing: {e}", file=sys.stderr)
     sys.exit(1)
@@ -89,6 +90,8 @@ class OmarGramDaemon:
         self.dialogs_cache = []
         self.unread_total = 0
         self.cached_avatars = {}
+        self.pinned_cache = {}  # chat_id -> list of pinned msgs
+        self.messages_cache = {}  # "chat_id_topic_id" -> (msgs, timestamp)
 
     async def start(self):
         # Save PID file with strict permissions
@@ -190,6 +193,7 @@ class OmarGramDaemon:
                 is_user = isinstance(ent, User)
                 is_group = isinstance(ent, (Chat, Channel)) and getattr(ent, "megagroup", False) or isinstance(ent, Chat)
                 is_channel = isinstance(ent, Channel) and not getattr(ent, "megagroup", False)
+                is_forum = isinstance(ent, Channel) and bool(getattr(ent, "forum", False))
 
                 unread = d.unread_count or 0
                 if not is_channel:
@@ -260,6 +264,7 @@ class OmarGramDaemon:
                     "is_user": is_user,
                     "is_group": is_group,
                     "is_channel": is_channel,
+                    "is_forum": is_forum,
                     "unread_count": unread,
                     "read_outbox_max_id": read_outbox_max_id,
                     "avatar": avatar_path,
@@ -296,13 +301,103 @@ class OmarGramDaemon:
         except Exception:
             pass
 
-    async def get_messages_for_chat(self, chat_id, limit=50):
+    async def get_pinned_messages(self, chat_id, topic_id=None):
+        """Fetch pinned messages for a chat. Uses cache to avoid repeated fetches."""
+        if not await self.client.is_user_authorized():
+            return []
+        cid = int(chat_id)
+        # Return from cache if available
+        if cid in self.pinned_cache:
+            return self.pinned_cache[cid]
+        try:
+            from telethon.tl.types import InputMessagesFilterPinned
+            entity = await self.client.get_entity(cid)
+            messages = await self.client.get_messages(entity, limit=50, filter=InputMessagesFilterPinned)
+            chat_title = getattr(entity, "first_name", "") or getattr(entity, "title", "User")
+            chat_avatar = self.cached_avatars.get(cid, "")
+            is_group_or_channel = isinstance(entity, (Chat, Channel))
+            if not hasattr(self, 'cached_senders'):
+                self.cached_senders = {}
+            result = []
+            for m in messages:
+                sender_name = "You" if m.out else chat_title
+                sender_avatar = chat_avatar if not m.out else ""
+                sender_color = get_avatar_color(sender_name)
+                if not m.out and is_group_or_channel and m.sender_id:
+                    if m.sender_id in self.cached_senders:
+                        cached = self.cached_senders[m.sender_id]
+                        sender_name = cached["name"]
+                        sender_avatar = cached["avatar"]
+                        sender_color = cached["color"]
+                    else:
+                        try:
+                            sender = await self.client.get_entity(m.sender_id)
+                            sender_name = getattr(sender, "first_name", "") or getattr(sender, "title", "") or getattr(sender, "username", "") or "User"
+                            sender_avatar = ""
+                            sender_color = get_avatar_color(sender_name)
+                            self.cached_senders[m.sender_id] = {"name": sender_name, "avatar": sender_avatar, "color": sender_color}
+                        except Exception:
+                            pass
+                text = m.message or ""
+                if not text and m.media:
+                    text = "📎 Media"
+                # Handle webpage metadata for pinned messages
+                webpage_meta = None
+                media_type = ""
+                media_path = ""
+                if m.media and isinstance(m.media, MessageMediaWebPage):
+                    wp = m.media.webpage
+                    if isinstance(wp, (WebPage, WebPagePending, WebPageEmpty)):
+                        media_type = "webpage"
+                        wp_photo = ""
+                        if hasattr(wp, "photo") and wp.photo:
+                            wp_photo_f = os.path.join(MEDIA_DIR, f"webpage_{m.id}_{cid}.jpg")
+                            if os.path.exists(wp_photo_f):
+                                wp_photo = wp_photo_f
+                            else:
+                                asyncio.create_task(self.download_media_bg(wp.photo, wp_photo_f))
+                        webpage_meta = {
+                            "site_name": getattr(wp, "site_name", "") or "",
+                            "title": getattr(wp, "title", "") or "",
+                            "description": getattr(wp, "description", "") or "",
+                            "url": getattr(wp, "url", "") or getattr(wp, "display_url", "") or "",
+                            "photo": wp_photo
+                        }
+                dt = m.date
+                time_str = dt.strftime("%H:%M") if dt else ""
+                date_str = dt.strftime("%b %d, %Y") if dt else ""
+                result.append({
+                    "id": m.id,
+                    "text": text,
+                    "sender": sender_name,
+                    "sender_id": m.sender_id,
+                    "sender_avatar": sender_avatar,
+                    "sender_color": sender_color,
+                    "out": m.out,
+                    "date": date_str,
+                    "time": time_str,
+                    "pinned": True,
+                    "reply_to": (getattr(m.reply_to, "reply_to_top_id", None) or getattr(m.reply_to, "reply_to_msg_id", None)) if m.reply_to else None,
+                    "media": bool(m.media),
+                    "media_type": media_type,
+                    "media_path": media_path,
+                    "webpage": webpage_meta,
+                })
+            self.pinned_cache[cid] = result
+            return result
+        except Exception:
+            return []
+
+    async def get_messages_for_chat(self, chat_id, limit=50, topic_id=None):
         if not await self.client.is_user_authorized():
             return []
         try:
             cid = int(chat_id)
             entity = await self.client.get_entity(cid)
-            messages = await self.client.get_messages(entity, limit=limit)
+            kwargs = {"limit": limit}
+            if topic_id:
+                kwargs["reply_to"] = int(topic_id)
+            messages = await self.client.get_messages(entity, **kwargs)
             
             read_outbox_max_id = 0
             chat_title = getattr(entity, "first_name", "") or getattr(entity, "title", "User")
@@ -332,7 +427,13 @@ class OmarGramDaemon:
                         sender_avatar = cached["avatar"]
                         sender_color = cached["color"]
                     else:
-                        sender_name = "User"
+                        try:
+                            sender = await self.client.get_entity(m.sender_id)
+                            sender_name = getattr(sender, "first_name", "") or getattr(sender, "title", "") or getattr(sender, "username", "") or "User"
+                            sender_color = get_avatar_color(sender_name)
+                            self.cached_senders[m.sender_id] = {"name": sender_name, "avatar": "", "color": sender_color}
+                        except Exception:
+                            sender_name = "User"
 
                 media_type = ""
                 media_path = ""
@@ -356,24 +457,24 @@ class OmarGramDaemon:
                             media_type = "sticker"
                         else:
                             media_type = "document"
-                    elif isinstance(m.media, MessageMediaWebPage) and isinstance(m.media.webpage, WebPage):
-                        media_type = "webpage"
+                    elif isinstance(m.media, MessageMediaWebPage):
                         wp = m.media.webpage
-                        wp_photo = ""
-                        if wp.photo:
-                            wp_photo_f = os.path.join(MEDIA_DIR, f"webpage_{m.id}_{cid}.jpg")
-                            if os.path.exists(wp_photo_f):
-                                wp_photo = wp_photo_f
-                            else:
-                                asyncio.create_task(self.download_media_bg(wp.photo, wp_photo_f))
-
-                        webpage_meta = {
-                            "site_name": getattr(wp, "site_name", "") or "",
-                            "title": getattr(wp, "title", "") or "",
-                            "description": getattr(wp, "description", "") or "",
-                            "url": getattr(wp, "url", "") or getattr(wp, "display_url", "") or "",
-                            "photo": wp_photo
-                        }
+                        if isinstance(wp, (WebPage, WebPagePending, WebPageEmpty)):
+                            media_type = "webpage"
+                            wp_photo = ""
+                            if hasattr(wp, "photo") and wp.photo:
+                                wp_photo_f = os.path.join(MEDIA_DIR, f"webpage_{m.id}_{cid}.jpg")
+                                if os.path.exists(wp_photo_f):
+                                    wp_photo = wp_photo_f
+                                else:
+                                    asyncio.create_task(self.download_media_bg(wp.photo, wp_photo_f))
+                            webpage_meta = {
+                                "site_name": getattr(wp, "site_name", "") or "",
+                                "title": getattr(wp, "title", "") or "",
+                                "description": getattr(wp, "description", "") or "",
+                                "url": getattr(wp, "url", "") or getattr(wp, "display_url", "") or "",
+                                "photo": wp_photo
+                            }
 
                 dt = m.date
                 time_str = dt.strftime("%H:%M") if dt else ""
@@ -431,13 +532,16 @@ class OmarGramDaemon:
             print(f"Error fetching messages for {chat_id}: {e}", file=sys.stderr)
             return getattr(self, 'chat_messages_cache', {}).get(int(chat_id) if str(chat_id).isdigit() else 0, [])
 
-    async def send_message_to_chat(self, chat_id, text):
+    async def send_message_to_chat(self, chat_id, text, topic_id=None):
         if not await self.client.is_user_authorized():
             return {"success": False, "error": "Not authorized"}
         try:
             cid = int(chat_id)
             entity = await self.client.get_entity(cid)
-            sent = await self.client.send_message(entity, text)
+            kwargs = {}
+            if topic_id:
+                kwargs["reply_to"] = int(topic_id)
+            sent = await self.client.send_message(entity, text, **kwargs)
             asyncio.create_task(self.refresh_dialogs_cache())
             return {"success": True, "message_id": sent.id}
         except Exception as e:
@@ -458,13 +562,20 @@ class OmarGramDaemon:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def mark_chat_read(self, chat_id):
+    async def mark_chat_read(self, chat_id, topic_id=None):
         if not await self.client.is_user_authorized():
             return {"success": False, "error": "Not authorized"}
         try:
             cid = int(chat_id)
             entity = await self.client.get_entity(cid)
-            await self.client.send_read_acknowledge(entity)
+            if topic_id:
+                from telethon.tl.functions.messages import ReadDiscussionRequest
+                # Get the latest message id in this topic for read_max_id
+                msgs = await self.client.get_messages(entity, limit=1, reply_to=int(topic_id))
+                read_max_id = msgs[0].id if msgs else 0
+                await self.client(ReadDiscussionRequest(peer=entity, msg_id=int(topic_id), read_max_id=read_max_id))
+            else:
+                await self.client.send_read_acknowledge(entity)
             for d in self.dialogs_cache:
                 if d.get("id") == cid:
                     d["unread_count"] = 0
@@ -630,8 +741,7 @@ class OmarGramDaemon:
                 mid = int(msg_id)
                 entity = await self.client.get_entity(cid)
                 await self.client.pin_message(entity, mid, notify=True)
-                if cid in getattr(self, "chat_messages_cache", {}):
-                    del self.chat_messages_cache[cid]
+                self.pinned_cache.pop(cid, None)
                 return {"success": True, "chat_id": cid, "message_id": mid}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -646,8 +756,7 @@ class OmarGramDaemon:
                 entity = await self.client.get_entity(cid)
                 mid = int(msg_id) if msg_id else None
                 await self.client.unpin_message(entity, mid)
-                if cid in getattr(self, "chat_messages_cache", {}):
-                    del self.chat_messages_cache[cid]
+                self.pinned_cache.pop(cid, None)
                 return {"success": True, "chat_id": cid}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -691,7 +800,143 @@ class OmarGramDaemon:
             except Exception as e:
                 return {"success": False, "error": str(e)}
 
-        elif action == "dialogs":
+        elif action == "forum_topics":
+            chat_id = cmd_dict.get("chat_id")
+            if not chat_id:
+                return {"success": False, "error": "chat_id required"}
+            if not await self.client.is_user_authorized():
+                return {"success": False, "error": "Not authorized"}
+            try:
+                cid = int(chat_id)
+                entity = await self.client.get_entity(cid)
+                chat_title = getattr(entity, "title", "Chat")
+                result = await self.client(functions.messages.GetForumTopicsRequest(
+                    peer=entity,
+                    offset_date=None,
+                    offset_id=0,
+                    offset_topic=0,
+                    limit=100,
+                    q=""
+                ))
+                msg_map = {m.id: m for m in result.messages}
+                # Build sender lookup from result.users and result.chats
+                sender_map = {}
+                for u in getattr(result, "users", []):
+                    sender_map[u.id] = getattr(u, "first_name", "") or getattr(u, "title", "") or getattr(u, "username", "") or "User"
+                for c in getattr(result, "chats", []):
+                    sender_map[c.id] = getattr(c, "title", "") or "Chat"
+                topics = []
+                for t in result.topics:
+                    msg = msg_map.get(t.top_message)
+                    last_text = ""
+                    last_sender = ""
+                    last_time = ""
+                    if msg:
+                        # Handle system/action messages
+                        if msg.action:
+                            act = msg.action
+                            act_type = type(act).__name__
+                            if act_type == "MessageActionTopicCreate":
+                                last_text = "Topic created"
+                            elif act_type == "MessageActionTopicEdit":
+                                if act.closed is True:
+                                    last_text = "Closed topic"
+                                elif act.closed is False:
+                                    last_text = "Reopened topic"
+                                elif act.title:
+                                    last_text = "Renamed topic"
+                                elif act.hidden is True:
+                                    last_text = "Hidden topic"
+                                elif act.hidden is False:
+                                    last_text = "Unhidden topic"
+                                else:
+                                    last_text = "Edited topic"
+                            elif act_type == "MessageActionPinMessage":
+                                last_text = "Pinned message"
+                            elif act_type == "MessageActionChatCreate":
+                                last_text = "Group created"
+                            elif act_type == "MessageActionChatEditTitle":
+                                last_text = "Changed title"
+                            elif act_type == "MessageActionChatAddUser":
+                                last_text = "Added user"
+                            elif act_type == "MessageActionChatDeleteUser":
+                                last_text = "Removed user"
+                            else:
+                                last_text = act_type.replace("MessageAction", "")
+                        else:
+                            last_text = (msg.message or "").replace("\n", " ").replace("\r", "")
+                            if not last_text and msg.media:
+                                last_text = "📎 Media"
+                        # Get sender name
+                        try:
+                            if msg.out:
+                                last_sender = "You"
+                            else:
+                                sid = msg.sender_id
+                                if not sid and msg.from_id:
+                                    sid = getattr(msg.from_id, "user_id", None) or getattr(msg.from_id, "channel_id", None)
+                                if sid and sid in sender_map:
+                                    last_sender = sender_map[sid]
+                                elif sid and sid in self.cached_senders:
+                                    last_sender = self.cached_senders[sid]["name"]
+                                elif sid:
+                                    try:
+                                        sender = await self.client.get_entity(sid)
+                                        last_sender = getattr(sender, "first_name", "") or getattr(sender, "title", "") or getattr(sender, "username", "") or "User"
+                                        self.cached_senders[sid] = {"name": last_sender, "avatar": "", "color": get_avatar_color(last_sender)}
+                                    except Exception:
+                                        last_sender = chat_title
+                                else:
+                                    last_sender = chat_title
+                        except Exception:
+                            pass
+                        if msg.date:
+                            now = msg.date.now(msg.date.tzinfo) if msg.date.tzinfo else msg.date.now()
+                            today = now.date()
+                            msg_day = msg.date.date()
+                            if msg_day == today:
+                                last_time = msg.date.strftime("%H:%M")
+                            elif (today - msg_day).days == 1:
+                                last_time = "Yesterday"
+                            else:
+                                last_time = msg.date.strftime("%b %d")
+                    topics.append({
+                        "id": t.id,
+                        "title": getattr(t, "title", "General"),
+                        "unread_count": getattr(t, "unread_count", 0),
+                        "is_general": getattr(t, "id", 0) == 1,
+                        "icon_emoji": "📌" if getattr(t, "pinned", False) else ("💬" if getattr(t, "id", 0) == 1 else "💬"),
+                        "icon_color": getattr(t, "icon_color", 0),
+                        "pinned": bool(getattr(t, "pinned", False)),
+                        "closed": bool(getattr(t, "closed", False)),
+                        "last_text": last_text[:60],
+                        "last_sender": last_sender,
+                        "last_time": last_time,
+                        "_sort_date": msg.date if msg else None,
+                    })
+                # Pinned first, then by latest activity (most recent first)
+                topics.sort(key=lambda x: (not x["pinned"], -(x["_sort_date"].timestamp() if x["_sort_date"] else 0)))
+                # Remove sort key from output
+                for t in topics:
+                    t.pop("_sort_date", None)
+                # Pre-fetch messages for the first topic in background
+                # so they're cached when QML requests them
+                if topics:
+                    async def prefetch():
+                        try:
+                            msgs = await self.get_messages_for_chat(chat_id, 50, topic_id=topics[0]["id"])
+                            ck = f"{chat_id}_{topics[0]['id']}"
+                            import time as _t
+                            self.messages_cache[ck] = (msgs, _t.time())
+                        except Exception:
+                            pass
+                    asyncio.create_task(prefetch())
+                return {"success": True, "chat_id": chat_id, "topics": topics}
+            except Exception as e:
+                # Not a forum or topics not supported — return empty gracefully
+                return {"success": True, "chat_id": chat_id, "topics": []}
+
+        if action == "dialogs":
             lim = int(cmd_dict.get("limit", 40))
             chats = await self.refresh_dialogs_cache(lim)
             return {"success": True, "chats": chats, "unread_total": self.unread_total}
@@ -701,13 +946,43 @@ class OmarGramDaemon:
             lim = int(cmd_dict.get("limit", 50))
             if not chat_id:
                 return {"success": False, "error": "chat_id required"}
-            msgs = await self.get_messages_for_chat(chat_id, lim)
+            topic_id = cmd_dict.get("topic_id")
+            cache_key = f"{chat_id}_{topic_id or '0'}"
+            import time as _time
+            cached = self.messages_cache.get(cache_key)
+            if cached and (_time.time() - cached[1]) < 30:
+                return {"success": True, "chat_id": chat_id, "messages": cached[0]}
+            # Fetch messages first (fast), then merge pinned from cache
+            msgs = await self.get_messages_for_chat(chat_id, lim, topic_id=topic_id)
+            # Merge pinned from cache (instant if already fetched)
+            cid = int(chat_id)
+            if cid in self.pinned_cache:
+                pinned_msgs = self.pinned_cache[cid]
+                if topic_id:
+                    tid = int(topic_id)
+                    if tid == 1:
+                        pinned_msgs = [p for p in pinned_msgs if p.get("reply_to") in (1, None)]
+                    else:
+                        pinned_msgs = [p for p in pinned_msgs if p.get("reply_to") == tid]
+                pinned_ids = set(pm["id"] for pm in pinned_msgs)
+                for m in msgs:
+                    m["pinned"] = m["id"] in pinned_ids
+                existing_ids = set(m["id"] for m in msgs)
+                for pm in pinned_msgs:
+                    if pm["id"] not in existing_ids:
+                        msgs.append(pm)
+                msgs.sort(key=lambda m: m["id"], reverse=True)
+            # Fetch pinned in background if not cached (will be ready on next refresh)
+            else:
+                asyncio.create_task(self.get_pinned_messages(chat_id))
+            self.messages_cache[cache_key] = (msgs, _time.time())
             return {"success": True, "chat_id": chat_id, "messages": msgs}
 
         elif action == "send":
             chat_id = cmd_dict.get("chat_id")
             text = cmd_dict.get("text", "")
-            return await self.send_message_to_chat(chat_id, text)
+            topic_id = cmd_dict.get("topic_id")
+            return await self.send_message_to_chat(chat_id, text, topic_id=topic_id)
 
         elif action in ("send_file", "send_media"):
             chat_id = cmd_dict.get("chat_id")
@@ -718,7 +993,8 @@ class OmarGramDaemon:
 
         elif action == "mark_read":
             chat_id = cmd_dict.get("chat_id")
-            return await self.mark_chat_read(chat_id)
+            topic_id = cmd_dict.get("topic_id")
+            return await self.mark_chat_read(chat_id, topic_id=topic_id)
 
         elif action == "start_qr":
             if await self.client.is_user_authorized():

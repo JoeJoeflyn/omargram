@@ -160,102 +160,112 @@ Item {
     color: Qt.rgba(1, 1, 1, 0.06)
   }
 
-  // Pinned Message Banner (Under Header)
-  property var pinnedMessage: {
-    if (!p.activeMessages) return null
+  // Pinned Messages (Under Header)
+  property var pinnedMessages: {
+    if (!p.activeMessages) return []
+    var result = []
     for (var i = 0; i < p.activeMessages.length; i++) {
-      if (p.activeMessages[i].pinned) return p.activeMessages[i]
+      if (p.activeMessages[i].pinned) result.push(p.activeMessages[i])
     }
-    return null
+    return result
   }
+  property var pinnedMessage: pinnedMessages.length > 0 ? pinnedMessages[pinnedIndex % pinnedMessages.length] : null
+  property int pinnedIndex: 0
 
   BorderSurface {
     id: pinnedBanner
     visible: root.pinnedMessage !== null
     anchors.top: chatHeader.bottom
-    anchors.topMargin: Style.space(2)
+    anchors.topMargin: Style.space(6)
     anchors.left: parent.left
     anchors.leftMargin: Style.space(8)
     anchors.right: parent.right
     anchors.rightMargin: Style.space(8)
-    height: Style.space(32)
-    radius: Style.space(6)
+    height: Style.space(30)
+    radius: Style.space(8)
     color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.05)
-    borderSpec: Border.leftSpec(Color.accent, 2)
+    borderSpec: Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08), 1)
     z: 10
+
+    // Vertical rail on the left when multiple pinned messages
+    Rectangle {
+      visible: root.pinnedMessages.length > 1
+      anchors.left: parent.left
+      anchors.leftMargin: Style.space(10)
+      anchors.top: parent.top
+      anchors.topMargin: Style.space(5)
+      anchors.bottom: parent.bottom
+      anchors.bottomMargin: Style.space(5)
+      width: 2
+      radius: 1
+      color: Color.accent
+    }
 
     Row {
       anchors.fill: parent
-      anchors.leftMargin: Style.space(8)
-      anchors.rightMargin: Style.space(8)
-      spacing: Style.space(8)
+      anchors.leftMargin: Style.space(16)
+      anchors.rightMargin: Style.space(10)
+      spacing: Style.space(6)
 
+      // "Pinned msg" title
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "Pinned Message"
+        color: p.foreground
+        font.family: p.fontFamily
+        font.pixelSize: Style.font.caption * 0.85
+        font.bold: true
+      }
+
+      // Counter if multiple pinned
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: root.pinnedMessages.length > 1 ? (root.pinnedIndex + 1 + "/" + root.pinnedMessages.length) : ""
+        color: p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.font.caption * 0.7
+        visible: root.pinnedMessages.length > 1
+      }
+
+      // Truncated message preview
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        width: parent.width - Style.space(110)
+        textFormat: Text.PlainText
+        text: root.pinnedMessage ? (root.pinnedMessage.text || "Media").replace(/\n/g, " ") : ""
+        color: p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.font.caption * 0.8
+        elide: Text.ElideRight
+        maximumLineCount: 1
+        wrapMode: Text.NoWrap
+        visible: text !== ""
+      }
+
+      // Pin icon on the right
       Text {
         anchors.verticalCenter: parent.verticalCenter
         text: "\uf08d"
-        color: Color.accent
-        font.family: p.fontFamily
-        font.pixelSize: Style.font.caption
-      }
-
-      Column {
-        anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - Style.space(45)
-        spacing: 1
-
-        Text {
-          text: "Pinned Message"
-          color: Color.accent
-          font.family: p.fontFamily
-          font.pixelSize: Style.space(9)
-          font.bold: true
-        }
-        Text {
-          text: root.pinnedMessage ? (root.pinnedMessage.text || "Media") : ""
-          textFormat: Text.PlainText
-          color: p.foreground
-          font.family: p.fontFamily
-          font.pixelSize: Style.font.caption * 0.85
-          elide: Text.ElideRight
-          width: parent.width
-        }
-      }
-
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        text: "\uf00d"
-        color: unpinMouse.containsMouse ? p.danger : p.dim
+        color: p.dim
         font.family: p.fontFamily
         font.pixelSize: Style.space(11)
-
-        ToolTip.visible: unpinMouse.containsMouse
-        ToolTip.delay: 350
-        ToolTip.text: "Unpin message"
-
-        MouseArea {
-          id: unpinMouse
-          anchors.fill: parent
-          anchors.margins: -4
-          hoverEnabled: true
-          cursorShape: Qt.PointingHandCursor
-          onClicked: {
-            if (root.pinnedMessage) p.unpinMessage(p.selectedChat.id, root.pinnedMessage.id)
-          }
-        }
       }
     }
 
     MouseArea {
       anchors.fill: parent
-      anchors.rightMargin: Style.space(24)
       cursorShape: Qt.PointingHandCursor
       onClicked: {
-        if (root.pinnedMessage) {
-          for (var idx = 0; idx < p.activeMessages.length; idx++) {
-            if (p.activeMessages[idx].id === root.pinnedMessage.id) {
-              msgListView.positionViewAtIndex(idx, ListView.Center)
-              break
-            }
+        if (root.pinnedMessages.length === 0) return
+        var nextIdx = (root.pinnedIndex + 1) % root.pinnedMessages.length
+        root.pinnedIndex = nextIdx
+        var target = root.pinnedMessages[nextIdx]
+        for (var idx = 0; idx < p.activeMessages.length; idx++) {
+          if (p.activeMessages[idx].id === target.id) {
+            msgListView.positionViewAtIndex(idx, ListView.Center)
+            break
           }
         }
       }
@@ -694,7 +704,7 @@ Item {
             implicitHeight: metaCol.implicitHeight + Style.space(14)
             radius: Style.space(8)
             color: msgRow.isOut ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.06)
-            borderSpec: Border.leftSpec(msgRow.isOut ? "#ffffff" : Color.accent, 3)
+            borderSpec: Border.flat(msgRow.isOut ? "#ffffff" : Color.accent, "0 0 0 3")
 
             MouseArea {
               anchors.fill: parent
@@ -890,9 +900,35 @@ Item {
       }
     }
 
-    // Empty State Placeholder
+    // Loading overlay — small spinner, doesn't replace messages
+    Item {
+      visible: p.selectedChat && p.loadingMessages && (!p.activeMessages || p.activeMessages.length === 0)
+      anchors.centerIn: parent
+      width: Style.space(26)
+      height: Style.space(26)
+
+      Text {
+        id: loadingIcon
+        anchors.centerIn: parent
+        text: "\uf110"
+        color: p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.space(26)
+      }
+
+      RotationAnimation {
+        running: parent.visible
+        loops: Animation.Infinite
+        target: loadingIcon
+        from: 0
+        to: 360
+        duration: 800
+      }
+    }
+
+    // Empty state — only when chat has genuinely 0 messages
     Column {
-      visible: !p.activeMessages || p.activeMessages.length === 0
+      visible: p.selectedChat && p.messagesLoaded && !p.loadingMessages && (!p.activeMessages || p.activeMessages.length === 0)
       anchors.centerIn: parent
       spacing: Style.space(6)
 
@@ -906,7 +942,7 @@ Item {
       Text {
         anchors.horizontalCenter: parent.horizontalCenter
         textFormat: Text.PlainText
-        text: "No messages in this chat"
+        text: "No messages yet"
         color: p.dim
         font.family: p.fontFamily
         font.pixelSize: Style.font.caption

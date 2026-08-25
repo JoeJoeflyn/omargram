@@ -145,7 +145,7 @@ Item {
   // 2. Search Box (Hidden when sidebar is collapsed)
   BorderSurface {
     id: searchBox
-    visible: !p.sidebarCollapsed
+    visible: !topicsView.visible && !p.sidebarCollapsed
     anchors.top: headerCard.bottom
     anchors.topMargin: Style.space(6)
     anchors.left: parent.left
@@ -217,7 +217,7 @@ Item {
   // 3. Filter Chips (All, DMs, Groups, Channels) (Hidden when sidebar is collapsed)
   Row {
     id: filterRow
-    visible: !p.sidebarCollapsed
+    visible: !topicsView.visible && !p.sidebarCollapsed
     anchors.top: searchBox.bottom
     anchors.topMargin: Style.space(6)
     anchors.left: parent.left
@@ -260,9 +260,240 @@ Item {
     }
   }
 
+  // 3b. Topics View (replaces chat list when a forum chat is open)
+  Item {
+    id: topicsView
+    visible: p.selectedChat && p.selectedChat.is_forum && (p.forumTopics.length > 0 || p.loadingTopics) && !p.sidebarCollapsed
+    anchors.top: headerCard.bottom
+    anchors.topMargin: Style.space(6)
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+
+    // Back button (standalone)
+    Item {
+      id: topicsHeader
+      anchors.top: parent.top
+      anchors.left: parent.left
+      anchors.right: parent.right
+      height: Style.space(32)
+
+      Text {
+        anchors.left: parent.left
+        anchors.leftMargin: Style.space(8)
+        anchors.verticalCenter: parent.verticalCenter
+        text: "\uf060"
+        color: backMouse.containsMouse ? Color.accent : p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.space(14)
+
+        MouseArea {
+          id: backMouse
+          anchors.fill: parent
+          anchors.margins: -6
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: p.clearTopicSelection()
+        }
+      }
+
+      Rectangle {
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 1
+        color: Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.06)
+      }
+    }
+
+    // Topics loading indicator
+    Item {
+      visible: p.loadingTopics && p.forumTopics.length === 0
+      anchors.top: topicsHeader.bottom
+      anchors.topMargin: Style.space(20)
+      anchors.horizontalCenter: parent.horizontalCenter
+      width: Style.space(24)
+      height: Style.space(24)
+
+      Text {
+        id: topicsLoadingIcon
+        anchors.centerIn: parent
+        text: "\uf110"
+        color: p.dim
+        font.family: p.fontFamily
+        font.pixelSize: Style.space(24)
+      }
+
+      RotationAnimation {
+        running: parent.visible
+        loops: Animation.Infinite
+        target: topicsLoadingIcon
+        from: 0
+        to: 360
+        duration: 800
+      }
+    }
+
+    ListView {
+      id: topicsListView
+      anchors.top: topicsHeader.bottom
+      anchors.topMargin: Style.space(4)
+      anchors.bottom: parent.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      clip: true
+      spacing: Style.space(2)
+      boundsBehavior: Flickable.DragOverBounds
+      cacheBuffer: 1500
+      model: p.forumTopics
+
+      ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+      delegate: Item {
+        id: topicRow
+        required property var modelData
+        readonly property bool isActive: p.activeTopic && p.activeTopic.id === modelData.id
+
+        width: topicsListView.width
+        height: Style.space(48)
+        clip: true
+
+        Rectangle {
+          anchors.fill: parent
+          anchors.leftMargin: Style.space(4)
+          anchors.rightMargin: Style.space(4)
+          radius: Style.space(6)
+          color: topicRow.isActive
+            ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.15)
+            : (topicMouse.containsMouse ? Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.06) : "transparent")
+          Behavior on color { ColorAnimation { duration: 120 } }
+
+          Row {
+            anchors.fill: parent
+            anchors.leftMargin: Style.space(10)
+            anchors.rightMargin: Style.space(8)
+            spacing: Style.space(8)
+
+            // Content column
+            Item {
+              anchors.verticalCenter: parent.verticalCenter
+              width: parent.width - Style.space(8)
+              height: Style.space(36)
+
+              // Top row: Title + Time
+              Item {
+                id: topicTopRow
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: Style.space(18)
+
+                // Time
+                Text {
+                  id: topicTime
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  textFormat: Text.PlainText
+                  text: modelData.last_time || ""
+                  color: p.dim
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.font.caption * 0.8
+                  visible: modelData.last_time !== ""
+                }
+
+                // Title
+                Text {
+                  anchors.left: parent.left
+                  anchors.right: topicTime.visible ? topicTime.left : parent.right
+                  anchors.rightMargin: Style.space(6)
+                  anchors.verticalCenter: parent.verticalCenter
+                  textFormat: Text.PlainText
+                  text: modelData.title || "Topic"
+                  color: topicRow.isActive ? Color.accent : p.foreground
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: topicRow.isActive
+                  elide: Text.ElideRight
+                }
+              }
+
+              // Bottom row: Last message + unread badge
+              Item {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: Style.space(16)
+
+                // Unread badge
+                BorderSurface {
+                  id: topicBadge
+                  visible: modelData.unread_count > 0
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  height: Style.space(15)
+                  implicitWidth: Math.max(Style.space(15), topicUnreadText.implicitWidth + Style.space(6))
+                  radius: Style.space(7.5)
+                  color: Color.accent
+                  borderSpec: Border.none
+
+                  Text {
+                    id: topicUnreadText
+                    anchors.centerIn: parent
+                    textFormat: Text.PlainText
+                    text: modelData.unread_count > 99 ? "99+" : String(modelData.unread_count)
+                    color: "#ffffff"
+                    font.family: p.fontFamily
+                    font.pixelSize: Style.space(8)
+                    font.bold: true
+                  }
+                }
+
+                // Last message preview
+                Text {
+                  anchors.left: parent.left
+                  anchors.right: topicBadge.visible ? topicBadge.left : parent.right
+                  anchors.rightMargin: topicBadge.visible ? Style.space(4) : 0
+                  anchors.verticalCenter: parent.verticalCenter
+                  textFormat: Text.PlainText
+                  text: {
+                    var s = modelData.last_sender || ""
+                    var t = (modelData.last_text || "").replace(/\n/g, " ")
+                    if (s && t) return s + ": " + t
+                    if (t) return t
+                    if (s) return s
+                    return ""
+                  }
+                  color: p.dim
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.space(10)
+                  elide: Text.ElideRight
+                }
+              }
+            }
+          }
+
+          MouseArea {
+            id: topicMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (topicRow.isActive) {
+                p.clearTopic()
+              } else {
+                p.selectTopic(modelData)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   // 4. Chats ListView (Anchored rigidly top-to-bottom: 0 recalculation jumps)
   ListView {
     id: chatListView
+    visible: !topicsView.visible
     anchors.top: p.sidebarCollapsed ? headerCard.bottom : filterRow.bottom
     anchors.topMargin: Style.space(6)
     anchors.bottom: parent.bottom

@@ -20,7 +20,8 @@
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "pollIntervalSec": 5
+      "pollIntervalSec": 5,
+      "topicLayout": "sidebar"
     },
     "schema": [
       {
@@ -31,6 +32,13 @@
         "max": 60,
         "step": 1,
         "defaultValue": 5
+      },
+      {
+        "key": "topicLayout",
+        "type": "enum",
+        "label": "Topic layout",
+        "values": ["sidebar", "bar"],
+        "defaultValue": "sidebar"
       }
     ]
   }
