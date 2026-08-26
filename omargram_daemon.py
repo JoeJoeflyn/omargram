@@ -542,6 +542,11 @@ class OmarGramDaemon:
             if topic_id:
                 kwargs["reply_to"] = int(topic_id)
             sent = await self.client.send_message(entity, text, **kwargs)
+            # Invalidate message cache so next fetch includes the new message
+            cache_key = f"{chat_id}_{topic_id or '0'}"
+            self.messages_cache.pop(cache_key, None)
+            if cid in getattr(self, "chat_messages_cache", {}):
+                del self.chat_messages_cache[cid]
             asyncio.create_task(self.refresh_dialogs_cache())
             return {"success": True, "message_id": sent.id}
         except Exception as e:
@@ -557,6 +562,12 @@ class OmarGramDaemon:
                 return {"success": False, "error": f"File not found: {file_path}"}
             rep_id = int(reply_to) if (reply_to and str(reply_to).isdigit()) else None
             sent = await self.client.send_file(entity, file_path, caption=caption or None, reply_to=rep_id)
+            # Invalidate message cache so next fetch includes the new file
+            for ck in list(self.messages_cache.keys()):
+                if ck.startswith(f"{chat_id}_"):
+                    self.messages_cache.pop(ck, None)
+            if cid in getattr(self, "chat_messages_cache", {}):
+                del self.chat_messages_cache[cid]
             asyncio.create_task(self.refresh_dialogs_cache())
             return {"success": True, "message_id": sent.id}
         except Exception as e:
@@ -689,6 +700,9 @@ class OmarGramDaemon:
                     await self.client.delete_messages(entity, [mid], revoke=True)
                 except Exception:
                     await self.client.delete_messages(entity, [mid])
+                for ck in list(self.messages_cache.keys()):
+                    if ck.startswith(f"{chat_id}_"):
+                        self.messages_cache.pop(ck, None)
                 if cid in getattr(self, "chat_messages_cache", {}):
                     del self.chat_messages_cache[cid]
                 return {"success": True, "chat_id": cid, "message_id": mid}
@@ -708,6 +722,9 @@ class OmarGramDaemon:
                     await self.client.delete_messages(entity, mids, revoke=True)
                 except Exception:
                     await self.client.delete_messages(entity, mids)
+                for ck in list(self.messages_cache.keys()):
+                    if ck.startswith(f"{chat_id}_"):
+                        self.messages_cache.pop(ck, None)
                 if cid in getattr(self, "chat_messages_cache", {}):
                     del self.chat_messages_cache[cid]
                 return {"success": True, "chat_id": cid, "deleted_count": len(mids)}
@@ -725,6 +742,9 @@ class OmarGramDaemon:
                 mid = int(msg_id)
                 entity = await self.client.get_entity(cid)
                 await self.client.edit_message(entity, mid, text)
+                for ck in list(self.messages_cache.keys()):
+                    if ck.startswith(f"{chat_id}_"):
+                        self.messages_cache.pop(ck, None)
                 if cid in getattr(self, "chat_messages_cache", {}):
                     del self.chat_messages_cache[cid]
                 return {"success": True, "chat_id": cid, "message_id": mid, "text": text}

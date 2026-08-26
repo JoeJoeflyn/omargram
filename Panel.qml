@@ -350,7 +350,8 @@ Panel {
     actionProc.running = true
 
     allChats = allChats.filter(function(c) { return c.id !== chatId })
-    if (messagesCache[chatId]) delete messagesCache[chatId]
+    var dck = String(chatId)
+    for (var k in messagesCache) { if (k.indexOf(dck + "_") === 0 || k === dck) delete messagesCache[k] }
     if (selectedChat && selectedChat.id === chatId) {
       closeActiveChat()
     }
@@ -363,7 +364,8 @@ Panel {
     actionProc.running = true
 
     allChats = allChats.filter(function(c) { return c.id !== chatId })
-    if (messagesCache[chatId]) delete messagesCache[chatId]
+    var lck = String(chatId)
+    for (var k2 in messagesCache) { if (k2.indexOf(lck + "_") === 0 || k2 === lck) delete messagesCache[k2] }
     if (selectedChat && selectedChat.id === chatId) {
       closeActiveChat()
     }
@@ -390,8 +392,9 @@ Panel {
 
     // Optimistically remove message from list and cache
     activeMessages = activeMessages.filter(function(m) { return m.id !== messageId })
-    if (messagesCache[chatId]) {
-      messagesCache[chatId] = messagesCache[chatId].filter(function(m) { return m.id !== messageId })
+    var dk = String(chatId) + (activeTopic ? "_" + String(activeTopic.id) : "")
+    if (messagesCache[dk]) {
+      messagesCache[dk] = messagesCache[dk].filter(function(m) { return m.id !== messageId })
     }
   }
 
@@ -502,8 +505,9 @@ Panel {
     actionProc.running = true
 
     activeMessages = activeMessages.filter(function(m) { return toDelete.indexOf(m.id) < 0 })
-    if (messagesCache[cid]) {
-      messagesCache[cid] = messagesCache[cid].filter(function(m) { return toDelete.indexOf(m.id) < 0 })
+    var bk = String(cid) + (activeTopic ? "_" + String(activeTopic.id) : "")
+    if (messagesCache[bk]) {
+      messagesCache[bk] = messagesCache[bk].filter(function(m) { return toDelete.indexOf(m.id) < 0 })
     }
     exitSelectMode()
   }
@@ -670,9 +674,10 @@ Panel {
       media_path: ""
     }
     
+    var cacheKey = String(cid) + (activeTopic ? "_" + String(activeTopic.id) : "")
     var currentMsgs = [optMsg].concat(activeMessages)
     activeMessages = currentMsgs
-    messagesCache[cid] = currentMsgs
+    messagesCache[cacheKey] = currentMsgs
 
     sendProc.running = false
     var repId = replyingTo ? String(replyingTo.id) : ""
@@ -801,9 +806,10 @@ Panel {
       media_path: isImg ? filePath : ""
     }
     
+    var fileCacheKey = String(cid) + (activeTopic ? "_" + String(activeTopic.id) : "")
     var currentMsgs = [optMsg].concat(activeMessages)
     activeMessages = currentMsgs
-    messagesCache[cid] = currentMsgs
+    messagesCache[fileCacheKey] = currentMsgs
     clearAttachedFile()
 
     sendProc.running = false

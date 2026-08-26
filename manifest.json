@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "omargram",
   "name": "OmarGram",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "author": "JoeJoeflyn",
   "license": "MIT",
   "description": "Native status bar Telegram client for Omarchy. Fast chat previews, instant messaging, unread notifications, and QR-code login.",
