@@ -44,6 +44,8 @@ BarWidget {
     if (panelLoader.item) panelLoader.item.closeForPopoutSwitch()
   }
 
+  readonly property int unreadCount: panelLoader.item ? panelLoader.item.unreadCount : 0
+
   visible: true
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -67,8 +69,8 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     slotSize: Style.bar.iconSlot
-    tooltipText: (panelLoader.item && panelLoader.item.unreadCount > 0)
-      ? "OmarGram (" + panelLoader.item.unreadCount + " unread)"
+    tooltipText: root.unreadCount > 0
+      ? "OmarGram (" + root.unreadCount + " unread)"
       : "OmarGram"
 
     iconComponent: Component {
@@ -86,11 +88,14 @@ BarWidget {
         }
 
         Rectangle {
-          visible: panelLoader.item && panelLoader.item.unreadCount > 0
-          width: Style.space(5)
-          height: Style.space(5)
+          z: 10
+          visible: root.unreadCount > 0
+          width: Style.space(6)
+          height: Style.space(6)
           radius: width / 2
-          color: Color.accent
+          color: (root.bar && root.bar.activeColor) ? root.bar.activeColor : Color.accent
+          border.width: 1
+          border.color: (root.bar && root.bar.background) ? root.bar.background : Color.background
           anchors.top: parent.top
           anchors.topMargin: Style.space(1)
           anchors.right: parent.right

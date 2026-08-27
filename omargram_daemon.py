@@ -109,7 +109,12 @@ class OmarGramDaemon:
 
         # Register live event listeners
         @self.client.on(events.NewMessage)
-        async def handler(event):
+        async def message_handler(event):
+            await self.update_unread_count()
+            asyncio.create_task(self.refresh_dialogs_cache())
+
+        @self.client.on(events.MessageRead)
+        async def read_handler(event):
             await self.update_unread_count()
             asyncio.create_task(self.refresh_dialogs_cache())
 
@@ -147,10 +152,10 @@ class OmarGramDaemon:
             return 0
         try:
             dialogs = await self.client.get_dialogs(limit=50)
-            total = sum(d.unread_count for d in dialogs if not d.is_channel)
+            total = sum(d.unread_count or 0 for d in dialogs)
             self.unread_total = total
             return total
-        except Exception:
+        except Exception as e:
             return self.unread_total
 
     async def get_chat_avatar(self, entity):
@@ -196,8 +201,7 @@ class OmarGramDaemon:
                 is_forum = isinstance(ent, Channel) and bool(getattr(ent, "forum", False))
 
                 unread = d.unread_count or 0
-                if not is_channel:
-                    total_unread += unread
+                total_unread += unread
 
                 last_msg_text = ""
                 last_msg_date = ""

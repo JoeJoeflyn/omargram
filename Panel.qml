@@ -893,18 +893,20 @@ Panel {
         try {
           var d = JSON.parse(text || "{}")
           var wasAuth = root.isAuthorized
-          root.isAuthorized = d.authorized === true
-          root.unreadCount = d.unread_total || 0
-          if (d.user) {
-            root.userName = d.user.name || ""
-            root.userUsername = d.user.username || ""
-            root.userAvatar = d.user.avatar || ""
-            root.userInitials = d.user.initials || "ME"
-          }
-          if (!root.isAuthorized && root.opened && !root.qrPath) {
-            root.startQrLogin()
-          } else if (!wasAuth && root.isAuthorized) {
-            dialogsProc.running = true
+          if (d.running === true) {
+            root.isAuthorized = d.authorized === true
+            root.unreadCount = d.unread_total || 0
+            if (d.user) {
+              root.userName = d.user.name || ""
+              root.userUsername = d.user.username || ""
+              root.userAvatar = d.user.avatar || ""
+              root.userInitials = d.user.initials || "ME"
+            }
+            if (d.authorized === false && root.opened && !root.qrPath) {
+              root.startQrLogin()
+            } else if (!wasAuth && root.isAuthorized) {
+              dialogsProc.running = true
+            }
           }
         } catch (e) {}
       }
@@ -927,7 +929,13 @@ Panel {
               root._lastChatsDigest = digest
               root.allChats = d.chats
             }
-            root.unreadCount = d.unread_total || 0
+            var count = (typeof d.unread_total === "number") ? d.unread_total : 0
+            if (count === 0 && d.chats) {
+              for (var ci = 0; ci < d.chats.length; ci++) {
+                count += (d.chats[ci].unread_count || 0)
+              }
+            }
+            root.unreadCount = count
           }
         } catch (e) {}
       }
@@ -1100,7 +1108,6 @@ Panel {
     onOpenChanged: {
       if (open) {
         root.refresh()
-        if (!root.isAuthorized) root.startQrLogin()
       }
     }
 
