@@ -2,15 +2,38 @@
 # Fast socket bridge - skips Python startup (saves ~0.4s per call)
 SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omargram/omargram.sock"
 PLUGIN_DIR="$(dirname "$(readlink -f "$0")")"
-PY="/home/giogio/.local/share/mise/installs/python/latest/bin/python3"
+PY="${OMARGRAM_PYTHON:-$(command -v python3)}"
+[ -x "$PY" ] || PY=/usr/bin/python3
 
 # Start daemon if not running
 if [ ! -S "$SOCK" ]; then
-  nohup "$PY" "$PLUGIN_DIR/omargram_daemon.py" > /dev/null 2>&1 &
-  for i in 1 2 3 4 5 6 7 8 9 10; do
+  RUN_DIR="$(dirname "$SOCK")"
+  mkdir -p "$RUN_DIR"
+  # Kill stale daemon that holds the SQLite session lock
+  if [ -f "$RUN_DIR/daemon.pid" ]; then
+    old_pid=$(grep -o '[0-9]*' "$RUN_DIR/daemon.pid" | head -1)
+    if [ -n "$old_pid" ]; then
+      kill "$old_pid" 2>/dev/null
+      for i in 1 2 3 4 5 6 7 8 9 10; do
+        kill -0 "$old_pid" 2>/dev/null || break
+        sleep 0.3
+      done
+      kill -9 "$old_pid" 2>/dev/null
+      sleep 0.5
+    fi
+  fi
+  # Remove stale SQLite journal so the new daemon can acquire the lock
+  rm -f "$HOME/.config/omargram/omargram.session-journal" 2>/dev/null
+  nohup "$PY" "$PLUGIN_DIR/omargram_daemon.py" > "$RUN_DIR/daemon.log" 2>&1 &
+  for i in $(seq 1 20); do
     [ -S "$SOCK" ] && break
     sleep 0.3
   done
+  if [ ! -S "$SOCK" ]; then
+    echo "{\"success\":false,\"error\":\"daemon failed to start — see $RUN_DIR/daemon.log\"}"
+    omarchy-notification-send -u critical -g "󰅙" "OmarGram" "Daemon failed to start — check $RUN_DIR/daemon.log" 2>/dev/null
+    exit 1
+  fi
 fi
 
 action="$1"; shift
