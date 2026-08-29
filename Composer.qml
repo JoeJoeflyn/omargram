@@ -293,7 +293,7 @@ Item {
           Text {
             anchors.centerIn: parent
             text: p.editingMessage ? "\uf00c" : "\uf1d8"
-            color: (inputArea.text.trim().length > 0 || p.attachedFile !== null) ? "#ffffff" : p.dim
+            color: (inputArea.text.trim().length > 0 || p.attachedFile !== null) ? p.accentForeground : p.dim
             font.family: p.fontFamily
             font.pixelSize: Style.font.caption
           }

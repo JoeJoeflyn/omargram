@@ -65,7 +65,7 @@ Item {
             anchors.centerIn: parent
             textFormat: Text.PlainText
             text: p.userInitials || "ME"
-            color: "#ffffff"
+            color: p.accentForeground
             font.family: p.fontFamily
             font.pixelSize: Style.font.caption * 0.8
             font.bold: true
@@ -441,7 +441,7 @@ Item {
                     anchors.centerIn: parent
                     textFormat: Text.PlainText
                     text: modelData.unread_count > 99 ? "99+" : String(modelData.unread_count)
-                    color: "#ffffff"
+                    color: p.accentForeground
                     font.family: p.fontFamily
                     font.pixelSize: Style.space(8)
                     font.bold: true
@@ -690,7 +690,7 @@ Item {
                 anchors.centerIn: parent
                 textFormat: Text.PlainText
                 text: modelData.unread_count > 99 ? "99+" : String(modelData.unread_count)
-                color: "#ffffff"
+                color: p.accentForeground
                 font.family: p.fontFamily
                 font.pixelSize: Style.space(8)
                 font.bold: true
@@ -1055,7 +1055,7 @@ Item {
               anchors.centerIn: parent
               textFormat: Text.PlainText
               text: p.userInitials || "ME"
-              color: "#ffffff"
+              color: p.accentForeground
               font.family: p.fontFamily
               font.pixelSize: Style.font.caption
               font.bold: true

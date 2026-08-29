@@ -629,8 +629,8 @@ Item {
         width: Math.min(msgListView.width * 0.72, Math.max(timeStatusRow.implicitWidth + Style.space(24), (modelData.media_path || modelData.media_type === "photo" || modelData.media_type === "video" || modelData.media_type === "sticker" || (modelData.webpage && modelData.webpage.photo)) ? (msgListView.width * 0.65) : (bubbleText.implicitWidth + Style.space(20))))
         height: bubbleContentCol.implicitHeight + Style.space(14)
         radius: Style.space(16)
-        color: msgRow.isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.3) : (msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08))
-        borderSpec: msgRow.isOut ? Border.none : Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.1), 1)
+        color: msgRow.isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.35) : (msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15))
+        borderSpec: msgRow.isOut ? Border.flat(Qt.darker(Color.accent, 1.25), 1) : Border.flat(Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.28), 1)
 
         MouseArea {
           id: bubbleMouse
@@ -922,7 +922,7 @@ Item {
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             text: modelData.text || ""
-            color: msgRow.isOut ? "#ffffff" : p.foreground
+            color: msgRow.isOut ? p.accentForeground : p.foreground
             font.family: p.fontFamily
             font.pixelSize: Style.font.bodySmall
             lineHeight: 1.15
@@ -935,7 +935,7 @@ Item {
             implicitHeight: metaCol.implicitHeight + Style.space(14)
             radius: Style.space(8)
             color: msgRow.isOut ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.06)
-            borderSpec: Border.flat(msgRow.isOut ? "#ffffff" : Color.accent, "0 0 0 3")
+            borderSpec: Border.flat(msgRow.isOut ? p.accentForeground : Color.accent, "0 0 0 3")
 
             MouseArea {
               anchors.fill: parent
@@ -962,7 +962,7 @@ Item {
                 width: parent.width
                 textFormat: Text.PlainText
                 text: (modelData.webpage && modelData.webpage.site_name) ? modelData.webpage.site_name : ""
-                color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.95) : Color.accent
+                color: msgRow.isOut ? p.accentForeground : Color.accent
                 font.family: p.fontFamily
                 font.pixelSize: Style.font.caption * 0.85
                 font.bold: true
@@ -977,7 +977,7 @@ Item {
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
                 text: (modelData.webpage && modelData.webpage.title) ? modelData.webpage.title : ""
-                color: msgRow.isOut ? "#ffffff" : p.foreground
+                color: msgRow.isOut ? p.accentForeground : p.foreground
                 font.family: p.fontFamily
                 font.pixelSize: Style.font.bodySmall
                 font.bold: true
@@ -992,7 +992,7 @@ Item {
                 wrapMode: Text.Wrap
                 maximumLineCount: 3
                 text: (modelData.webpage && modelData.webpage.description) ? modelData.webpage.description : ""
-                color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.9) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.85)
+                color: msgRow.isOut ? p.accentForegroundDim : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.85)
                 font.family: p.fontFamily
                 font.pixelSize: Style.font.caption * 0.9
                 elide: Text.ElideRight
@@ -1081,7 +1081,7 @@ Item {
 
                   Text {
                     text: String(modelData.count || 1)
-                    color: msgRow.isOut ? "#ffffff" : (isChosen ? Color.accent : p.foreground)
+                    color: msgRow.isOut ? p.accentForeground : (isChosen ? Color.accent : p.foreground)
                     font.family: p.fontFamily
                     font.pixelSize: Style.space(9)
                     font.bold: true
@@ -1112,7 +1112,7 @@ Item {
             Text {
               visible: modelData.pinned === true
               text: "\uf08d"
-              color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.8) : Color.accent
+              color: msgRow.isOut ? p.accentForegroundDim : Color.accent
               font.family: p.fontFamily
               font.pixelSize: Style.space(7.5)
               anchors.verticalCenter: parent.verticalCenter
@@ -1123,7 +1123,7 @@ Item {
               visible: modelData.is_edited === true
               textFormat: Text.PlainText
               text: "edited"
-              color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.7) : p.dim
+              color: msgRow.isOut ? p.accentForegroundDim : p.dim
               font.family: p.fontFamily
               font.pixelSize: Style.space(7.5)
               font.italic: true
@@ -1133,7 +1133,7 @@ Item {
             Text {
               textFormat: Text.PlainText
               text: modelData.time || ""
-              color: msgRow.isOut ? Qt.rgba(1, 1, 1, 0.75) : p.dim
+              color: msgRow.isOut ? p.accentForegroundDim : p.dim
               font.family: p.fontFamily
               font.pixelSize: Style.space(8)
               anchors.verticalCenter: parent.verticalCenter
@@ -1147,7 +1147,7 @@ Item {
 
               Text {
                 text: "\uf00c"
-                color: (modelData.status === "read" || modelData.is_read) ? "#ffffff" : Qt.rgba(1, 1, 1, 0.7)
+                color: (modelData.status === "read" || modelData.is_read) ? p.accentForeground : p.accentForegroundDim
                 font.family: p.fontFamily
                 font.pixelSize: Style.space(8)
               }
@@ -1155,7 +1155,7 @@ Item {
               Text {
                 visible: modelData.status === "read" || modelData.is_read
                 text: "\uf00c"
-                color: "#ffffff"
+                color: p.accentForeground
                 font.family: p.fontFamily
                 font.pixelSize: Style.space(8)
               }

@@ -176,7 +176,7 @@ Item {
           anchors.centerIn: parent
           textFormat: Text.PlainText
           text: root.waitingFor2Fa ? "Submit Password" : (root.waitingForCode ? "Confirm Code" : "Send Code")
-          color: "#ffffff"
+          color: p.accentForeground
           font.family: p.fontFamily
           font.pixelSize: Style.font.bodySmall
           font.bold: true

@@ -23,6 +23,8 @@ Panel {
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property color surface: Color.popups.background
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  readonly property color accentForeground: (Color.accent.r * 0.299 + Color.accent.g * 0.587 + Color.accent.b * 0.114) > 0.65 ? "#101112" : "#ffffff"
+  readonly property color accentForegroundDim: (Color.accent.r * 0.299 + Color.accent.g * 0.587 + Color.accent.b * 0.114) > 0.65 ? Qt.rgba(0.06, 0.07, 0.07, 0.75) : Qt.rgba(1, 1, 1, 0.75)
 
   // ---- State
   property bool isAuthorized: false
