@@ -7,6 +7,12 @@ BarWidget {
   id: root
   moduleName: "omargram"
 
+  function ensurePanel() {
+    if (!panelLoader.active) {
+      panelLoader.active = true
+    }
+  }
+
   function injectPanel() {
     var target = panelLoader.item
     if (!target) return
@@ -21,17 +27,23 @@ BarWidget {
   }
 
   function togglePanel() {
+    ensurePanel()
     if (panelLoader.item && panelLoader.item.toggle) panelLoader.item.toggle()
+    else Qt.callLater(function() { if (panelLoader.item && panelLoader.item.openFromHotkey) panelLoader.item.openFromHotkey() })
   }
 
   function openChat(chatId) {
+    ensurePanel()
     if (panelLoader.item && panelLoader.item.selectChatById) panelLoader.item.selectChatById(chatId)
+    else Qt.callLater(function() { if (panelLoader.item && panelLoader.item.selectChatById) panelLoader.item.selectChatById(chatId) })
   }
 
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
 
   function open() {
+    ensurePanel()
     if (panelLoader.item && panelLoader.item.openFromHotkey) panelLoader.item.openFromHotkey()
+    else Qt.callLater(function() { if (panelLoader.item && panelLoader.item.openFromHotkey) panelLoader.item.openFromHotkey() })
   }
 
   function close() {
@@ -55,7 +67,7 @@ BarWidget {
 
   Loader {
     id: panelLoader
-    active: true
+    active: false
     source: Qt.resolvedUrl("Panel.qml")
     visible: false
     onLoaded: {
