@@ -63,6 +63,42 @@ Panel {
   property string pickerSearchQuery: ""
   property bool reopenAfterPick: false
 
+  property var activeMediaViewer: null
+
+  function openMediaViewer(path, type, msgData) {
+    var pth = path || ""
+    var thm = (msgData && msgData.media_thumb) ? msgData.media_thumb : pth
+    if (!pth && msgData && msgData.id && msgData.chat_id) {
+      var ext = (type === "video") ? ".mp4" : ((type === "sticker") ? ".webp" : ".jpg")
+      pth = "/home/giogio/.cache/omargram/media/" + (type || "photo") + "_" + msgData.id + "_" + msgData.chat_id + ext
+    }
+    activeMediaViewer = {
+      path: pth,
+      thumb: thm || pth,
+      type: type || "photo",
+      message: msgData || null,
+      info: (msgData && msgData.media_info) ? msgData.media_info : null
+    }
+  }
+
+  function closeMediaViewer() {
+    activeMediaViewer = null
+  }
+
+  function downloadMedia(chatId, messageId, mediaType) {
+    if (!chatId || !messageId) return
+    downloadMediaProc.running = false
+    downloadMediaProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "download_media", String(chatId), String(messageId), mediaType || "video"]
+    downloadMediaProc.running = true
+  }
+
+  function openMediaExternally(filePath, app) {
+    if (!filePath) return
+    openExtProc.running = false
+    openExtProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "open_external", filePath, app || "xdg-open"]
+    openExtProc.running = true
+  }
+
   property string qrPath: ""
   property double qrTimestamp: 0
 
@@ -833,12 +869,20 @@ Panel {
     actionProc.running = true
 
     var updated = []
+    var unreadDelta = 0
     for (var i = 0; i < allChats.length; i++) {
       var c = Object.assign({}, allChats[i])
-      if (c.id === chatId) c.unread_count = 0
+      if (String(c.id) === String(chatId)) {
+        unreadDelta = c.unread_count || 0
+        c.unread_count = 0
+      }
       updated.push(c)
     }
     allChats = updated
+    filterChatsList()
+    if (unreadDelta > 0) {
+      unreadCount = Math.max(0, unreadCount - unreadDelta)
+    }
 
     // Clear topic unread count
     if (activeTopic && forumTopics.length > 0) {
@@ -924,13 +968,20 @@ Panel {
         try {
           var d = JSON.parse(text || "{}")
           if (d.success && d.chats) {
+            if (root.selectedChat) {
+              for (var k = 0; k < d.chats.length; k++) {
+                if (String(d.chats[k].id) === String(root.selectedChat.id)) {
+                  d.chats[k].unread_count = 0
+                }
+              }
+            }
             var digest = JSON.stringify(d.chats)
             if (root._lastChatsDigest !== digest) {
               root._lastChatsDigest = digest
               root.allChats = d.chats
             }
-            var count = (typeof d.unread_total === "number") ? d.unread_total : 0
-            if (count === 0 && d.chats) {
+            var count = 0
+            if (d.chats) {
               for (var ci = 0; ci < d.chats.length; ci++) {
                 count += (d.chats[ci].unread_count || 0)
               }
@@ -957,14 +1008,19 @@ Panel {
             var respKey = String(d.chat_id) + (root.activeTopic ? "_" + String(root.activeTopic.id) : "")
             root.messagesCache[respKey] = d.messages
             // Only update if this response is for the chat we're currently viewing
-            if (root.selectedChat && respKey === root._loadingChatKey) {
+            if (root.selectedChat && (respKey === root._loadingChatKey || String(root.selectedChat.id) === String(d.chat_id))) {
               root._lastMsgDigest = JSON.stringify(d.messages || [])
               root.activeMessages = d.messages || []
               root.messagesLoaded = true
               root.loadingMessages = false
             }
+          } else {
+            root.messagesLoaded = true
+            root.loadingMessages = false
           }
         } catch (e) {
+          root.messagesLoaded = true
+          root.loadingMessages = false
         }
       }
     }
@@ -1074,6 +1130,43 @@ Panel {
     }
   }
 
+  Process {
+    id: downloadMediaProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(text || "{}")
+          if (d.success && d.file_path) {
+            if (root.activeMediaViewer && root.activeMediaViewer.message && root.activeMediaViewer.message.id === d.message_id) {
+              var updated = Object.assign({}, root.activeMediaViewer)
+              updated.path = d.file_path
+              root.activeMediaViewer = updated
+            }
+            if (root.selectedChat && root.selectedChat.id === d.chat_id) {
+              var msgs = []
+              for (var i = 0; i < root.activeMessages.length; i++) {
+                var m = Object.assign({}, root.activeMessages[i])
+                if (m.id === d.message_id) {
+                  m.media_path = d.file_path
+                  if (m.media_info) m.media_info.is_downloaded = true
+                }
+                msgs.push(m)
+              }
+              root.activeMessages = msgs
+              var cacheKey = String(d.chat_id) + (root.activeTopic ? "_" + String(root.activeTopic.id) : "")
+              if (root.messagesCache[cacheKey]) root.messagesCache[cacheKey] = msgs
+            }
+          }
+        } catch(e) {}
+      }
+    }
+  }
+
+  Process {
+    id: openExtProc
+  }
+
   // Background Poll Timer
   Timer {
     id: pollTimer
@@ -1116,7 +1209,10 @@ Panel {
       anchors.fill: parent
 
       onCloseRequested: {
-        if (root.selectedChat) root.closeActiveChat()
+        if (root.activeMediaViewer !== null) root.closeMediaViewer()
+        else if (root.forwardModalOpen) root.closeForwardDialog()
+        else if (root.filePickerOpen) root.closeFilePicker()
+        else if (root.selectedChat) root.closeActiveChat()
         else root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
@@ -1795,6 +1891,13 @@ Panel {
           }
         }
       }
+    }
+
+    // 5. Fullscreen Media Viewer Modal (Photos & Videos)
+    MediaModal {
+      id: mediaModalComp
+      p: root
+      z: 10000
     }
   }
 }

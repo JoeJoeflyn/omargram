@@ -626,7 +626,7 @@ Item {
         anchors.right: msgRow.isOut ? parent.right : undefined
         anchors.rightMargin: msgRow.isOut ? Style.space(10) : 0
         anchors.top: parent.top
-        width: Math.min(msgListView.width * 0.72, Math.max(timeStatusRow.implicitWidth + Style.space(24), (modelData.media_path || (modelData.webpage && modelData.webpage.photo)) ? (msgListView.width * 0.65) : (bubbleText.implicitWidth + Style.space(20))))
+        width: Math.min(msgListView.width * 0.72, Math.max(timeStatusRow.implicitWidth + Style.space(24), (modelData.media_path || modelData.media_type === "photo" || modelData.media_type === "video" || modelData.media_type === "sticker" || (modelData.webpage && modelData.webpage.photo)) ? (msgListView.width * 0.65) : (bubbleText.implicitWidth + Style.space(20))))
         height: bubbleContentCol.implicitHeight + Style.space(14)
         radius: Style.space(16)
         color: msgRow.isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.3) : (msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08))
@@ -673,14 +673,245 @@ Item {
             elide: Text.ElideRight
           }
 
-          // Attached Photo Image
-          Image {
-            visible: modelData.media_path !== "" && modelData.media_path !== undefined
+          // Attached Photo Image (Click to Maximize)
+          BorderSurface {
+            id: photoBox
+            visible: modelData.media_type === "photo" || modelData.media_type === "sticker"
             width: parent.width
-            height: Math.min(Style.space(160), width * 0.6)
-            source: modelData.media_path ? "file://" + modelData.media_path : ""
-            fillMode: Image.PreserveAspectCrop
-            sourceSize.width: 500; sourceSize.height: 300
+            height: Math.min(Style.space(200), width * 0.68)
+            radius: Style.space(10)
+            color: Qt.rgba(0, 0, 0, 0.25)
+            borderSpec: Border.none
+            clip: true
+            z: 20
+
+            Image {
+              id: photoImg
+              anchors.fill: parent
+              source: modelData.media_path ? ("file://" + modelData.media_path) : (modelData.media_thumb ? ("file://" + modelData.media_thumb) : "")
+              fillMode: Image.PreserveAspectCrop
+              sourceSize.width: 600; sourceSize.height: 400
+              smooth: true
+              mipmap: true
+            }
+
+            // Placeholder if photo is still downloading
+            BorderSurface {
+              visible: photoImg.status !== Image.Ready && (!modelData.media_path || photoImg.status === Image.Loading || photoImg.status === Image.Null)
+              anchors.fill: parent
+              color: Qt.rgba(0, 0, 0, 0.45)
+              borderSpec: Border.none
+
+              Column {
+                anchors.centerIn: parent
+                spacing: Style.space(6)
+                Text {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  text: "\uf03e"
+                  color: Color.accent
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.space(22)
+                }
+                Text {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  text: "Photo • Click to View"
+                  color: "#ffffff"
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
+              }
+            }
+
+            // Hover overlay with maximize icon
+            Rectangle {
+              anchors.fill: parent
+              color: Qt.rgba(0, 0, 0, 0.35)
+              visible: photoMouse.containsMouse
+
+              Row {
+                anchors.centerIn: parent
+                spacing: Style.space(6)
+                Text {
+                  text: "\uf00e"
+                  color: "#ffffff"
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.space(13)
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                  text: "View Full Photo"
+                  color: "#ffffff"
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+              }
+            }
+
+            MouseArea {
+              id: photoMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              z: 30
+              onClicked: {
+                var target = modelData.media_path || modelData.media_thumb
+                p.openMediaViewer(target, "photo", modelData)
+              }
+            }
+          }
+
+          // Attached Video Card (Click to Play & Maximize)
+          BorderSurface {
+            id: videoCardBox
+            visible: modelData.media_type === "video"
+            width: parent.width
+            height: Math.min(Style.space(200), width * 0.68)
+            radius: Style.space(8)
+            color: Qt.rgba(0, 0, 0, 0.35)
+            borderSpec: Border.flat(Qt.rgba(1, 1, 1, 0.15), 1)
+            clip: true
+            z: 20
+
+            // Video Thumbnail
+            Image {
+              id: vidThumbImg
+              anchors.fill: parent
+              source: (modelData.media_thumb && modelData.media_thumb !== "") ? ("file://" + modelData.media_thumb) : (modelData.media_path ? ("file://" + modelData.media_path) : "")
+              fillMode: Image.PreserveAspectCrop
+              sourceSize.width: 600; sourceSize.height: 400
+              smooth: true
+              mipmap: true
+              opacity: 0.85
+            }
+
+            // Placeholder if thumbnail is still loading
+            BorderSurface {
+              visible: !modelData.media_thumb && !modelData.media_path
+              anchors.fill: parent
+              color: Qt.rgba(0, 0, 0, 0.45)
+              borderSpec: Border.none
+
+              Column {
+                anchors.centerIn: parent
+                spacing: Style.space(6)
+                Text {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  text: "\uf03d"
+                  color: Color.accent
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.space(24)
+                }
+                Text {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  text: "Video • Click to Play"
+                  color: "#ffffff"
+                  font.family: p.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
+              }
+            }
+
+            // Dark gradient overlay
+            Rectangle {
+              anchors.fill: parent
+              gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.2) }
+                GradientStop { position: 0.7; color: Qt.rgba(0, 0, 0, 0.1) }
+                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.75) }
+              }
+            }
+
+            // Large Center Play Button
+            BorderSurface {
+              anchors.centerIn: parent
+              width: Style.space(44); height: Style.space(44)
+              radius: width / 2
+              color: videoMouse.containsMouse ? Color.accent : Qt.rgba(0, 0, 0, 0.65)
+              borderSpec: Border.flat(videoMouse.containsMouse ? "#ffffff" : Color.accent, 1.5)
+
+              Text {
+                anchors.centerIn: parent
+                anchors.horizontalCenterOffset: Style.space(1.5)
+                text: "\uf04b"
+                color: videoMouse.containsMouse ? "#ffffff" : Color.accent
+                font.family: p.fontFamily
+                font.pixelSize: Style.space(16)
+              }
+            }
+
+            // Bottom Badges: Duration (Bottom Left) and Size (Bottom Right)
+            Row {
+              anchors.bottom: parent.bottom
+              anchors.left: parent.left
+              anchors.margins: Style.space(8)
+              spacing: Style.space(4)
+
+              BorderSurface {
+                height: Style.space(20)
+                implicitWidth: durTxt.implicitWidth + Style.space(10)
+                radius: Style.space(4)
+                color: Qt.rgba(0, 0, 0, 0.7)
+                borderSpec: Border.none
+
+                Row {
+                  anchors.centerIn: parent
+                  spacing: Style.space(3)
+                  Text {
+                    text: "\uf03d"
+                    color: Color.accent
+                    font.family: p.fontFamily
+                    font.pixelSize: Style.space(8)
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                  Text {
+                    id: durTxt
+                    text: (modelData.media_info && modelData.media_info.formatted_duration) ? modelData.media_info.formatted_duration : "Video"
+                    color: "#ffffff"
+                    font.family: p.fontFamily
+                    font.pixelSize: Style.font.caption * 0.8
+                    font.bold: true
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                }
+              }
+            }
+
+            // File Size badge (Bottom Right)
+            BorderSurface {
+              anchors.bottom: parent.bottom
+              anchors.right: parent.right
+              anchors.margins: Style.space(8)
+              height: Style.space(20)
+              implicitWidth: sizeTxt.implicitWidth + Style.space(10)
+              radius: Style.space(4)
+              color: Qt.rgba(0, 0, 0, 0.7)
+              borderSpec: Border.none
+
+              Text {
+                id: sizeTxt
+                anchors.centerIn: parent
+                text: (modelData.media_info && modelData.media_info.size) ? modelData.media_info.size : "Play"
+                color: Qt.rgba(1, 1, 1, 0.85)
+                font.family: p.fontFamily
+                font.pixelSize: Style.font.caption * 0.8
+                font.bold: true
+              }
+            }
+
+            MouseArea {
+              id: videoMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              z: 30
+              onClicked: {
+                p.openMediaViewer(modelData.media_path, "video", modelData)
+              }
+            }
           }
 
           // Message text body
@@ -767,14 +998,48 @@ Item {
                 elide: Text.ElideRight
               }
 
-              // Webpage Thumbnail Preview Image
-              Image {
+              // Webpage Thumbnail Preview Image (Click to View Full Photo)
+              BorderSurface {
                 visible: modelData.webpage && modelData.webpage.photo !== "" && modelData.webpage.photo !== undefined
                 width: parent.width
                 height: Math.min(Style.space(130), width * 0.52)
-                source: (modelData.webpage && modelData.webpage.photo) ? "file://" + modelData.webpage.photo : ""
-                fillMode: Image.PreserveAspectCrop
-                sourceSize.width: 500; sourceSize.height: 300
+                radius: Style.space(6)
+                color: Qt.rgba(0, 0, 0, 0.2)
+                borderSpec: Border.none
+                clip: true
+
+                Image {
+                  anchors.fill: parent
+                  source: (modelData.webpage && modelData.webpage.photo) ? "file://" + modelData.webpage.photo : ""
+                  fillMode: Image.PreserveAspectCrop
+                  sourceSize.width: 500; sourceSize.height: 300
+                }
+
+                Rectangle {
+                  anchors.fill: parent
+                  color: Qt.rgba(0, 0, 0, 0.35)
+                  visible: wpPhotoM.containsMouse
+
+                  Text {
+                    anchors.centerIn: parent
+                    text: "\uf00e"
+                    color: "#ffffff"
+                    font.family: p.fontFamily
+                    font.pixelSize: Style.space(14)
+                  }
+                }
+
+                MouseArea {
+                  id: wpPhotoM
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: {
+                    if (modelData.webpage && modelData.webpage.photo) {
+                      p.openMediaViewer(modelData.webpage.photo, "photo", modelData)
+                    }
+                  }
+                }
               }
             }
           }

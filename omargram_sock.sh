@@ -5,31 +5,24 @@ PLUGIN_DIR="$(dirname "$(readlink -f "$0")")"
 PY="${OMARGRAM_PYTHON:-$(command -v python3)}"
 [ -x "$PY" ] || PY=/usr/bin/python3
 
-# Start daemon if not running
-if [ ! -S "$SOCK" ]; then
+# Check if daemon is active and responsive on the socket
+is_daemon_alive() {
+  [ -S "$SOCK" ] || return 1
+  echo '{"action":"status"}' | socat -t 0.6 - UNIX-CONNECT:"$SOCK" >/dev/null 2>&1
+}
+
+if ! is_daemon_alive; then
   RUN_DIR="$(dirname "$SOCK")"
   mkdir -p "$RUN_DIR"
-  # Kill stale daemon that holds the SQLite session lock
-  if [ -f "$RUN_DIR/daemon.pid" ]; then
-    old_pid=$(grep -o '[0-9]*' "$RUN_DIR/daemon.pid" | head -1)
-    if [ -n "$old_pid" ]; then
-      kill "$old_pid" 2>/dev/null
-      for i in 1 2 3 4 5 6 7 8 9 10; do
-        kill -0 "$old_pid" 2>/dev/null || break
-        sleep 0.3
-      done
-      kill -9 "$old_pid" 2>/dev/null
-      sleep 0.5
-    fi
-  fi
-  # Remove stale SQLite journal so the new daemon can acquire the lock
+  rm -f "$SOCK" 2>/dev/null
+  pkill -f omargram_daemon.py 2>/dev/null || true
   rm -f "$HOME/.config/omargram/omargram.session-journal" 2>/dev/null
   nohup "$PY" "$PLUGIN_DIR/omargram_daemon.py" > "$RUN_DIR/daemon.log" 2>&1 &
-  for i in $(seq 1 20); do
-    [ -S "$SOCK" ] && break
-    sleep 0.3
+  for i in $(seq 1 25); do
+    is_daemon_alive && break
+    sleep 0.2
   done
-  if [ ! -S "$SOCK" ]; then
+  if ! is_daemon_alive; then
     echo "{\"success\":false,\"error\":\"daemon failed to start — see $RUN_DIR/daemon.log\"}"
     omarchy-notification-send -u critical -g "󰅙" "OmarGram" "Daemon failed to start — check $RUN_DIR/daemon.log" 2>/dev/null
     exit 1
@@ -149,6 +142,14 @@ case "$action" in
   submit_code)
     code="$1"; pwd="${2:-}"
     json="{\"action\":\"submit_code\",\"code\":\"$code\",\"password\":\"$pwd\"}"
+    ;;
+  download_media)
+    chat_id="$1"; msg_id="$2"; media_type="${3:-video}"
+    json="{\"action\":\"download_media\",\"chat_id\":\"$chat_id\",\"message_id\":\"$msg_id\",\"media_type\":\"$media_type\"}"
+    ;;
+  open_external)
+    file_path="$1"; app="${2:-xdg-open}"
+    json="{\"action\":\"open_external\",\"file_path\":\"$file_path\",\"app\":\"$app\"}"
     ;;
   logout)
     json="{\"action\":\"logout\"}"

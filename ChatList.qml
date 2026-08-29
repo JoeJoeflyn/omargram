@@ -614,7 +614,7 @@ Item {
 
           // Unread badge dot when collapsed
           Rectangle {
-            visible: p.sidebarCollapsed && modelData.unread_count > 0
+            visible: p.sidebarCollapsed && modelData.unread_count > 0 && !chatRow.isSelected
             width: Style.space(10); height: Style.space(10)
             radius: width / 2.0
             color: Color.accent
@@ -646,7 +646,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               textFormat: Text.PlainText
               text: (modelData.last_message && modelData.last_message.time) ? modelData.last_message.time : ""
-              color: modelData.unread_count > 0 ? Color.accent : p.dim
+              color: (modelData.unread_count > 0 && !chatRow.isSelected) ? Color.accent : p.dim
               font.family: p.fontFamily
               font.pixelSize: Style.font.caption * 0.8
             }
@@ -659,10 +659,10 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               textFormat: Text.PlainText
               text: modelData.title || "Chat"
-              color: (modelData.unread_count > 0 || isSelected) ? p.foreground : Qt.darker(p.foreground, 1.2)
+              color: (modelData.unread_count > 0 && !chatRow.isSelected || isSelected) ? p.foreground : Qt.darker(p.foreground, 1.2)
               font.family: p.fontFamily
               font.pixelSize: Style.font.bodySmall
-              font.bold: modelData.unread_count > 0 || isSelected
+              font.bold: (modelData.unread_count > 0 && !chatRow.isSelected) || isSelected
               elide: Text.ElideRight
             }
           }
@@ -676,7 +676,7 @@ Item {
 
             BorderSurface {
               id: badgePill
-              visible: modelData.unread_count > 0
+              visible: modelData.unread_count > 0 && !chatRow.isSelected
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               height: Style.space(15)

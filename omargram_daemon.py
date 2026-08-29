@@ -37,7 +37,7 @@ for d in (CONFIG_DIR, CACHE_DIR, AVATARS_DIR, MEDIA_DIR, OMARGRAM_RUN_DIR):
 
 try:
     from telethon import TelegramClient, events, functions, types
-    from telethon.tl.types import User, Chat, Channel, MessageMediaPhoto, MessageMediaDocument, MessageMediaWebPage, WebPage, WebPagePending, WebPageEmpty, InputReportReasonSpam, ReactionEmoji
+    from telethon.tl.types import User, Chat, Channel, MessageMediaPhoto, MessageMediaDocument, MessageMediaWebPage, WebPage, WebPagePending, WebPageEmpty, InputReportReasonSpam, ReactionEmoji, DocumentAttributeVideo, DocumentAttributeAudio, DocumentAttributeFilename
     from telethon.tl.functions.channels import LeaveChannelRequest
     from telethon.tl.functions.messages import DeleteChatUserRequest, ReportSpamRequest, SendReactionRequest
     from telethon.tl.functions.account import ReportPeerRequest
@@ -77,12 +77,51 @@ def get_initials(name):
         return (parts[0][0] + parts[-1][0]).upper()
     return name.strip()[:2].upper()
 
+def format_message_action(msg):
+    if not msg or not getattr(msg, "action", None):
+        return ""
+    act = msg.action
+    act_type = type(act).__name__
+    if act_type in ("MessageActionChatAddUser", "MessageActionChatJoinedByLink", "MessageActionChatJoinedByRequest"):
+        return "joined the group"
+    elif act_type == "MessageActionChatDeleteUser":
+        return "left the group"
+    elif act_type == "MessageActionChatCreate":
+        return "Group created"
+    elif act_type == "MessageActionChatEditTitle":
+        return f"Changed group name to {getattr(act, 'title', '')}" if getattr(act, 'title', '') else "Changed group name"
+    elif act_type == "MessageActionChatEditPhoto":
+        return "Changed group photo"
+    elif act_type == "MessageActionPinMessage":
+        return "Pinned a message"
+    elif act_type in ("MessageActionGroupCall", "MessageActionGroupCallScheduled"):
+        return "Video chat"
+    elif act_type == "MessageActionTopicCreate":
+        return f"Topic created: {getattr(act, 'title', '')}" if getattr(act, 'title', '') else "Topic created"
+    elif act_type == "MessageActionTopicEdit":
+        return "Topic edited"
+    else:
+        return act_type.replace("MessageAction", "").strip()
+
+from telethon.sessions.sqlite import SQLiteSession
+import sqlite3
+
+class SafeSQLiteSession(SQLiteSession):
+    def _cursor(self):
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.filename, timeout=30.0, check_same_thread=False)
+            try:
+                self._conn.execute("PRAGMA busy_timeout = 30000")
+            except Exception:
+                pass
+        return self._conn.cursor()
+
 class OmarGramDaemon:
     def __init__(self):
         api_id, api_hash = load_config()
         self.api_id = api_id
         self.api_hash = api_hash
-        self.client = TelegramClient(SESSION_PATH, self.api_id, self.api_hash)
+        self.client = TelegramClient(SafeSQLiteSession(SESSION_PATH), self.api_id, self.api_hash)
         self.qr_login_obj = None
         self.phone_code_hash = None
         self.phone_number = None
@@ -212,6 +251,8 @@ class OmarGramDaemon:
                 if d.message:
                     last_msg_out = bool(d.message.out)
                     last_msg_text = d.message.message or ""
+                    if not last_msg_text and getattr(d.message, "action", None):
+                        last_msg_text = format_message_action(d.message)
                     if d.message.media:
                         if isinstance(d.message.media, MessageMediaPhoto):
                             media_type = "photo"
@@ -293,17 +334,23 @@ class OmarGramDaemon:
             print(f"Error refreshing dialogs: {e}", file=sys.stderr)
             return self.dialogs_cache
 
-    async def download_media_bg(self, media, target_path):
+    async def download_media_bg(self, media, target_path, thumb=None):
         try:
             if not os.path.exists(target_path):
-                path = await self.client.download_media(media, file=target_path)
+                kwargs = {"file": target_path}
+                if thumb is not None:
+                    kwargs["thumb"] = thumb
+                path = await self.client.download_media(media, **kwargs)
                 if path and os.path.exists(path):
                     try:
                         os.chmod(path, 0o600)
                     except Exception:
                         pass
+                    return path
+            return target_path
         except Exception:
             pass
+        return ""
 
     async def get_pinned_messages(self, chat_id, topic_id=None):
         """Fetch pinned messages for a chat. Uses cache to avoid repeated fetches."""
@@ -441,6 +488,8 @@ class OmarGramDaemon:
 
                 media_type = ""
                 media_path = ""
+                media_thumb = ""
+                media_info = None
                 webpage_meta = None
                 if m.media:
                     if isinstance(m.media, MessageMediaPhoto):
@@ -448,19 +497,81 @@ class OmarGramDaemon:
                         photo_f = os.path.join(MEDIA_DIR, f"photo_{m.id}_{cid}.jpg")
                         if os.path.exists(photo_f):
                             media_path = photo_f
+                            media_thumb = photo_f
                         else:
                             asyncio.create_task(self.download_media_bg(m.media, photo_f))
                     elif isinstance(m.media, MessageMediaDocument):
                         doc = getattr(m.media, "document", None)
                         mime = getattr(doc, "mime_type", "") if doc else ""
-                        if "audio" in mime or "ogg" in mime:
+                        attrs = getattr(doc, "attributes", []) if doc else []
+                        is_vid = "video" in mime or any(isinstance(a, DocumentAttributeVideo) for a in attrs)
+                        if "audio" in mime or "ogg" in mime or any(isinstance(a, DocumentAttributeAudio) for a in attrs):
                             media_type = "voice"
-                        elif "video" in mime:
+                        elif is_vid:
                             media_type = "video"
+                            duration = 0
+                            w = 0
+                            h = 0
+                            file_name = "video.mp4"
+                            for a in attrs:
+                                if isinstance(a, DocumentAttributeVideo):
+                                    duration = getattr(a, "duration", 0) or 0
+                                    w = getattr(a, "w", 0) or 0
+                                    h = getattr(a, "h", 0) or 0
+                                elif hasattr(a, "file_name") and a.file_name:
+                                    file_name = a.file_name
+                            
+                            mins = int(duration) // 60
+                            secs = int(duration) % 60
+                            fmt_dur = f"{mins:02d}:{secs:02d}"
+                            
+                            size_bytes = getattr(doc, "size", 0) or 0
+                            if size_bytes >= 1024 * 1024:
+                                fmt_size = f"{size_bytes / (1024 * 1024):.1f} MB"
+                            elif size_bytes >= 1024:
+                                fmt_size = f"{size_bytes / 1024:.0f} KB"
+                            else:
+                                fmt_size = f"{size_bytes} B"
+                            
+                            video_thumb_f = os.path.join(MEDIA_DIR, f"thumb_video_{m.id}_{cid}.jpg")
+                            if os.path.exists(video_thumb_f):
+                                media_thumb = video_thumb_f
+                            else:
+                                asyncio.create_task(self.download_media_bg(m.media, video_thumb_f, thumb=-1))
+                            
+                            video_f = os.path.join(MEDIA_DIR, f"video_{m.id}_{cid}.mp4")
+                            if os.path.exists(video_f) and os.path.getsize(video_f) > 0:
+                                media_path = video_f
+                            
+                            media_info = {
+                                "duration": duration,
+                                "formatted_duration": fmt_dur,
+                                "width": w,
+                                "height": h,
+                                "size": fmt_size,
+                                "file_name": file_name,
+                                "is_downloaded": bool(media_path)
+                            }
                         elif "webp" in mime:
                             media_type = "sticker"
+                            sticker_f = os.path.join(MEDIA_DIR, f"sticker_{m.id}_{cid}.webp")
+                            if os.path.exists(sticker_f):
+                                media_path = sticker_f
+                                media_thumb = sticker_f
+                            else:
+                                asyncio.create_task(self.download_media_bg(m.media, sticker_f))
                         else:
                             media_type = "document"
+                            file_name = "file"
+                            for a in attrs:
+                                if hasattr(a, "file_name") and a.file_name:
+                                    file_name = a.file_name
+                            size_bytes = getattr(doc, "size", 0) or 0
+                            fmt_size = f"{size_bytes / (1024 * 1024):.1f} MB" if size_bytes >= 1024 * 1024 else f"{size_bytes / 1024:.0f} KB"
+                            media_info = {
+                                "file_name": file_name,
+                                "size": fmt_size
+                            }
                     elif isinstance(m.media, MessageMediaWebPage):
                         wp = m.media.webpage
                         if isinstance(wp, (WebPage, WebPagePending, WebPageEmpty)):
@@ -513,7 +624,7 @@ class OmarGramDaemon:
                     "sender_avatar": sender_avatar,
                     "sender_initials": get_initials(sender_name),
                     "sender_color": sender_color,
-                    "text": m.message or "",
+                    "text": m.message or (format_message_action(m) if getattr(m, "action", None) else ""),
                     "time": time_str,
                     "date": date_str,
                     "out": bool(m.out),
@@ -524,6 +635,8 @@ class OmarGramDaemon:
                     "reactions": reactions_list,
                     "media_type": media_type,
                     "media_path": media_path,
+                    "media_thumb": media_thumb,
+                    "media_info": media_info,
                     "webpage": webpage_meta,
                     "reply_to_msg_id": m.reply_to_msg_id if hasattr(m, "reply_to_msg_id") else None
                 })
@@ -1014,6 +1127,47 @@ class OmarGramDaemon:
             caption = cmd_dict.get("caption", "") or cmd_dict.get("text", "")
             reply_to = cmd_dict.get("reply_to")
             return await self.send_file_to_chat(chat_id, file_path, caption, reply_to)
+
+        elif action == "download_media":
+            chat_id = cmd_dict.get("chat_id")
+            msg_id = cmd_dict.get("message_id")
+            media_type = cmd_dict.get("media_type", "video")
+            if not chat_id or not msg_id:
+                return {"success": False, "error": "chat_id and message_id required"}
+            try:
+                cid = int(chat_id)
+                mid = int(msg_id)
+                entity = await self.client.get_entity(cid)
+                msg = await self.client.get_messages(entity, ids=mid)
+                if not msg or not msg.media:
+                    return {"success": False, "error": "No media in message"}
+                ext = ".mp4" if media_type == "video" else (".jpg" if media_type == "photo" else "")
+                target_file = os.path.join(MEDIA_DIR, f"{media_type}_{mid}_{cid}{ext}")
+                if os.path.exists(target_file) and os.path.getsize(target_file) > 0:
+                    return {"success": True, "file_path": target_file, "chat_id": cid, "message_id": mid, "media_type": media_type}
+                path = await self.client.download_media(msg.media, file=target_file)
+                if path and os.path.exists(path):
+                    try:
+                        os.chmod(path, 0o600)
+                    except Exception:
+                        pass
+                    return {"success": True, "file_path": path, "chat_id": cid, "message_id": mid, "media_type": media_type}
+                return {"success": False, "error": "Failed to download media"}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        elif action == "open_external":
+            file_path = cmd_dict.get("file_path", "")
+            app = cmd_dict.get("app", "xdg-open")
+            if not file_path or not os.path.exists(file_path):
+                return {"success": False, "error": "File does not exist"}
+            try:
+                import subprocess
+                cmd = ["mpv", file_path] if app == "mpv" else ["xdg-open", file_path]
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return {"success": True, "file_path": file_path, "app": app}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
 
         elif action == "mark_read":
             chat_id = cmd_dict.get("chat_id")
