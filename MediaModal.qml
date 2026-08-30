@@ -23,6 +23,10 @@ Item {
   property bool isLooping: false
   property bool isMuted: false
 
+  // Lazy-loaded video player: null until a video is actually ready to play.
+  // ponytail: keeps the Qt Multimedia + ffmpeg/nvcuvid/x265 decode stack (~200MB) out of RAM until a video actually plays, not when the chat panel opens.
+  readonly property var videoPlayer: videoCoreLoader.item ? videoCoreLoader.item.vp : null
+
   visible: mediaData !== null
   anchors.fill: parent
   z: 10000
@@ -33,10 +37,7 @@ Item {
       root.panX = 0
       root.panY = 0
       if (root.mediaType === "video") {
-        if (root.mediaPath !== "") {
-          videoPlayer.source = "file://" + root.mediaPath
-          videoPlayer.play()
-        }
+        // videoPlayer.source/play handled by videoCoreLoader.onLoaded when the Loader activates
         if (root.messageData && root.messageData.chat_id && root.messageData.id) {
           root.isDownloading = (root.mediaPath === "")
           p.downloadMedia(root.messageData.chat_id, root.messageData.id, "video")
@@ -47,10 +48,12 @@ Item {
         }
       }
     } else {
-      if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
-        videoPlayer.stop()
+      if (videoPlayer) {
+        if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
+          videoPlayer.stop()
+        }
+        videoPlayer.source = ""
       }
-      videoPlayer.source = ""
       root.isDownloading = false
     }
   }
@@ -62,8 +65,12 @@ Item {
         if (p.activeMediaViewer.path && p.activeMediaViewer.path !== "") {
           root.isDownloading = false
           if (p.activeMediaViewer.type === "video") {
-            videoPlayer.source = "file://" + p.activeMediaViewer.path
-            videoPlayer.play()
+            // If the Loader is already active (switching videos), update source directly.
+            // If not, the Loader will activate and onLoaded will set source + play.
+            if (videoPlayer) {
+              videoPlayer.source = "file://" + p.activeMediaViewer.path
+              videoPlayer.play()
+            }
           }
         }
       }
@@ -82,7 +89,7 @@ Item {
   }
 
   function close() {
-    if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
+    if (videoPlayer && videoPlayer.playbackState === MediaPlayer.PlayingState) {
       videoPlayer.stop()
     }
     p.closeMediaViewer()
@@ -457,36 +464,6 @@ Item {
         visible: root.mediaType === "video"
         anchors.fill: parent
 
-        MediaPlayer {
-          id: videoPlayer
-          videoOutput: videoOutput
-          audioOutput: AudioOutput {
-            id: audioOut
-            volume: volSlider.value
-            muted: root.isMuted
-          }
-          loops: root.isLooping ? MediaPlayer.Infinite : 1
-        }
-
-        VideoOutput {
-          id: videoOutput
-          anchors.fill: parent
-          fillMode: VideoOutput.PreserveAspectFit
-          visible: root.mediaPath !== "" && !root.isDownloading
-
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-              if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
-                videoPlayer.pause()
-              } else {
-                videoPlayer.play()
-              }
-            }
-          }
-        }
-
         // Thumbnail fallback while downloading
         Image {
           visible: root.mediaPath === "" || root.isDownloading
@@ -562,10 +539,60 @@ Item {
       }
     }
 
+    // Lazy-loaded video core: MediaPlayer + VideoOutput + controls.
+    // Only instantiated when a video is downloaded and ready to play, so the
+    // Qt Multimedia + ffmpeg/nvcuvid/x265 decode stack doesn't load at panel open.
+    Loader {
+      id: videoCoreLoader
+      active: root.mediaType === "video" && root.mediaPath !== "" && !root.isDownloading
+      visible: active
+      anchors.fill: parent
+      z: 10001
+
+      onLoaded: {
+        if (item && item.vp && root.mediaPath !== "") {
+          item.vp.source = "file://" + root.mediaPath
+          item.vp.play()
+        }
+      }
+
+      sourceComponent: Item {
+        anchors.fill: parent
+        property alias vp: videoPlayer
+
+        MediaPlayer {
+          id: videoPlayer
+          videoOutput: videoOutput
+          audioOutput: AudioOutput {
+            id: audioOut
+            volume: volSlider.value
+            muted: root.isMuted
+          }
+          loops: root.isLooping ? MediaPlayer.Infinite : 1
+        }
+
+        VideoOutput {
+          id: videoOutput
+          anchors.fill: parent
+          fillMode: VideoOutput.PreserveAspectFit
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              if (videoPlayer.playbackState === MediaPlayer.PlayingState) {
+                videoPlayer.pause()
+              } else {
+                videoPlayer.play()
+              }
+            }
+          }
+        }
+
     // 3. Bottom Video Controls Bar
     BorderSurface {
       id: videoControlsBar
-      visible: root.mediaType === "video" && root.mediaPath !== "" && !root.isDownloading
+      visible: true
       anchors.bottom: parent.bottom
       anchors.left: parent.left
       anchors.right: parent.right
@@ -758,5 +785,6 @@ Item {
         }
       }
     }
-  }
-}
+  } // closes sourceComponent Item
+  } // closes videoCoreLoader
+} // closes root
