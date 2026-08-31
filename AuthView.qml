@@ -120,7 +120,7 @@ Item {
           selectByMouse: true
           text: root.phoneNumber
           onTextChanged: root.phoneNumber = text
-          Text { visible: !phoneInput.text && !phoneInput.activeFocus; text: "Phone (+1234567890)"; color: p.dim; font.family: p.fontFamily; font.pixelSize: Style.font.bodySmall; anchors.verticalCenter: parent.verticalCenter }
+          Text { visible: !phoneInput.text && !phoneInput.activeFocus; text: "Phone with country code (+84...)"; color: p.dim; font.family: p.fontFamily; font.pixelSize: Style.font.bodySmall; anchors.verticalCenter: parent.verticalCenter }
         }
       }
 
@@ -185,17 +185,35 @@ Item {
         MouseArea {
           anchors.fill: parent; cursorShape: Qt.PointingHandCursor
           onClicked: {
+            root.authError = ""
             if (root.waitingFor2Fa) {
               p.submitCode(root.authCode, root.twoFaPassword)
             } else if (root.waitingForCode) {
               p.submitCode(root.authCode, "")
             } else {
+              if (!root.phoneNumber.startsWith("+")) {
+                root.authError = "Include your country code (e.g. +84 for Vietnam)"
+                return
+              }
               p.sendPhoneCode(root.phoneNumber)
               root.waitingForCode = true
             }
           }
         }
       }
+    }
+
+    // Error Display
+    Text {
+      visible: root.authError !== ""
+      width: parent.width
+      horizontalAlignment: Text.AlignHCenter
+      wrapMode: Text.Wrap
+      textFormat: Text.PlainText
+      text: root.authError
+      color: "#f07171"
+      font.family: p.fontFamily
+      font.pixelSize: Style.font.caption
     }
 
     // Toggle Mode Button (QR <-> Phone)
