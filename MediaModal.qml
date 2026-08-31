@@ -785,6 +785,7 @@ Item {
         }
       }
     }
-  } // closes sourceComponent Item
-  } // closes videoCoreLoader
+      } // closes sourceComponent Item
+    } // closes videoCoreLoader
+  } // closes content Item
 } // closes root
