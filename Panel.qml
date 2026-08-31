@@ -1061,6 +1061,24 @@ Panel {
 
   Process {
     id: actionProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var d = JSON.parse(text || "{}")
+          if (d.requires_password) {
+            authView.waitingFor2Fa = true
+            authView.waitingForCode = false
+          } else if (d.success && authView.waitingFor2Fa) {
+            authView.waitingFor2Fa = false
+            authView.authCode = ""
+            authView.twoFaPassword = ""
+          } else if (d.error && !d.success) {
+            authView.authError = d.error
+          }
+        } catch (e) {}
+      }
+    }
   }
 
   Process {
