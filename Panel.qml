@@ -357,6 +357,7 @@ Panel {
   }
 
   function replyToMessage(msg) {
+    if (editingMessage) cancelEditingMessage()
     replyingTo = msg
   }
 
@@ -439,6 +440,7 @@ Panel {
   // ---- Edit Message Actions
   function startEditingMessage(msg) {
     if (!msg) return
+    if (replyingTo) clearReply()
     editingMessage = msg
   }
 
@@ -694,6 +696,10 @@ Panel {
     var hours = now.getHours()
     var mins = now.getMinutes()
     var timeStr = (hours < 10 ? "0" + hours : hours) + ":" + (mins < 10 ? "0" + mins : mins)
+
+    var repId = replyingTo ? String(replyingTo.id) : ""
+    var repSender = replyingTo ? (replyingTo.sender_name || "") : ""
+    var repText = replyingTo ? (replyingTo.text || (replyingTo.media_type ? "Media" : "")) : ""
     
     var optMsg = {
       id: Date.now(),
@@ -709,7 +715,10 @@ Panel {
       status: "sent",
       is_read: false,
       media_type: "",
-      media_path: ""
+      media_path: "",
+      reply_to_msg_id: repId ? Number(repId) : null,
+      reply_to_sender: repSender,
+      reply_to_text: repText
     }
     
     var cacheKey = String(cid) + (activeTopic ? "_" + String(activeTopic.id) : "")
@@ -718,9 +727,9 @@ Panel {
     messagesCache[cacheKey] = currentMsgs
 
     sendProc.running = false
-    var repId = replyingTo ? String(replyingTo.id) : ""
     var sendArgs = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "send", String(cid), text]
-    if (activeTopic) sendArgs.push(String(activeTopic.id))
+    if (activeTopic) sendArgs.push("--topic", String(activeTopic.id))
+    if (repId) sendArgs.push("--reply-to", repId)
     sendProc.command = sendArgs
     sendProc.running = true
     clearReply()
@@ -827,6 +836,10 @@ Panel {
     var fname = parts[parts.length - 1]
     var isImg = /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(fname)
     
+    var repId = replyingTo ? String(replyingTo.id) : ""
+    var repSender = replyingTo ? (replyingTo.sender_name || "") : ""
+    var repText = replyingTo ? (replyingTo.text || (replyingTo.media_type ? "Media" : "")) : ""
+
     var optMsg = {
       id: Date.now(),
       chat_id: cid,
@@ -841,7 +854,10 @@ Panel {
       status: "sent",
       is_read: false,
       media_type: isImg ? "photo" : "document",
-      media_path: isImg ? filePath : ""
+      media_path: isImg ? filePath : "",
+      reply_to_msg_id: repId ? Number(repId) : null,
+      reply_to_sender: repSender,
+      reply_to_text: repText
     }
     
     var fileCacheKey = String(cid) + (activeTopic ? "_" + String(activeTopic.id) : "")
@@ -851,11 +867,11 @@ Panel {
     clearAttachedFile()
 
     sendProc.running = false
-    var repId = replyingTo ? String(replyingTo.id) : ""
     var cmd = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "send_file", String(cid), filePath]
     if (caption) cmd.push(caption)
-    else if (repId) cmd.push("")
-    if (repId) cmd.push(repId)
+    else cmd.push("")
+    if (repId) cmd.push("--reply-to", repId)
+    if (activeTopic) cmd.push("--topic", String(activeTopic.id))
     clearReply()
 
     sendProc.command = cmd
@@ -1190,7 +1206,7 @@ Panel {
   // Background Poll Timer
   Timer {
     id: pollTimer
-    interval: root.opened ? 2000 : 8000
+    interval: root.opened ? 1500 : 6000
     running: true; repeat: true; triggeredOnStart: true
     onTriggered: root.refresh()
   }
@@ -1204,6 +1220,9 @@ Panel {
     function chat(chatId) {
       root.openFromHotkey()
       root.selectChatById(chatId)
+    }
+    function refresh() {
+      root.refresh()
     }
   }
 

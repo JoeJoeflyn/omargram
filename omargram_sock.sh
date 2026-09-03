@@ -60,23 +60,56 @@ case "$action" in
   send)
     chat_id="$1"; shift
     topic_id=""
-    last_arg="${@: -1}"
-    if [[ "$last_arg" =~ ^-?[0-9]+$ ]]; then
-      topic_id="$last_arg"
-      set -- "${@:1:$#-1}"
+    reply_to=""
+    args=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --reply-to)
+          reply_to="$2"; shift 2 ;;
+        --topic)
+          topic_id="$2"; shift 2 ;;
+        *)
+          args+=("$1"); shift ;;
+      esac
+    done
+    if [ "${#args[@]}" -gt 1 ] && [ -z "$topic_id" ] && [ -z "$reply_to" ]; then
+      last_arg="${args[-1]}"
+      if [[ "$last_arg" =~ ^-?[0-9]+$ ]]; then
+        topic_id="$last_arg"
+        unset 'args[${#args[@]}-1]'
+      fi
     fi
-    text="$*"
+    text="${args[*]}"
     text="${text//\\/\\\\}"; text="${text//\"/\\\"}"; text="${text//$'\n'/\\n}"
-    if [ -n "$topic_id" ]; then
-      json="{\"action\":\"send\",\"chat_id\":\"$chat_id\",\"text\":\"$text\",\"topic_id\":\"$topic_id\"}"
-    else
-      json="{\"action\":\"send\",\"chat_id\":\"$chat_id\",\"text\":\"$text\"}"
-    fi
+    json="{\"action\":\"send\",\"chat_id\":\"$chat_id\",\"text\":\"$text\""
+    if [ -n "$topic_id" ]; then json="$json,\"topic_id\":\"$topic_id\""; fi
+    if [ -n "$reply_to" ]; then json="$json,\"reply_to\":\"$reply_to\""; fi
+    json="$json}"
     ;;
   send_file|send_media)
-    chat_id="$1"; file_path="$2"; caption="${3:-}"; reply_to="${4:-}"
+    chat_id="$1"; file_path="$2"; shift 2
+    caption=""
+    reply_to=""
+    topic_id=""
+    args=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --reply-to)
+          reply_to="$2"; shift 2 ;;
+        --topic)
+          topic_id="$2"; shift 2 ;;
+        *)
+          args+=("$1"); shift ;;
+      esac
+    done
+    if [ "${#args[@]}" -ge 1 ]; then caption="${args[0]}"; fi
+    if [ "${#args[@]}" -ge 2 ] && [ -z "$reply_to" ]; then reply_to="${args[1]}"; fi
+    if [ "${#args[@]}" -ge 3 ] && [ -z "$topic_id" ]; then topic_id="${args[2]}"; fi
     caption="${caption//\\/\\\\}"; caption="${caption//\"/\\\"}"
-    json="{\"action\":\"send_file\",\"chat_id\":\"$chat_id\",\"file_path\":\"$file_path\",\"caption\":\"$caption\",\"reply_to\":\"$reply_to\"}"
+    json="{\"action\":\"send_file\",\"chat_id\":\"$chat_id\",\"file_path\":\"$file_path\",\"caption\":\"$caption\""
+    if [ -n "$reply_to" ]; then json="$json,\"reply_to\":\"$reply_to\""; fi
+    if [ -n "$topic_id" ]; then json="$json,\"topic_id\":\"$topic_id\""; fi
+    json="$json}"
     ;;
   mark_read)
     chat_id="$1"; topic_id="${2:-}"

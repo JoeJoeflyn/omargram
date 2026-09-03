@@ -401,35 +401,73 @@ def main():
         print(json.dumps(result))
     elif action == "send":
         if len(sys.argv) < 4:
-            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py send <chat_id> <text>"}))
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py send <chat_id> <text> [--reply-to <id>] [--topic <id>]"}))
             sys.exit(1)
         chat_id = sys.argv[2]
-        # Last arg is topic_id if it's a plain integer, otherwise it's part of the text
         raw_args = sys.argv[3:]
         topic_id = None
-        if raw_args and raw_args[-1].lstrip("-").isdigit():
-            topic_id = raw_args[-1]
-            raw_args = raw_args[:-1]
-        text = " ".join(raw_args)
+        reply_to = None
+        pos_args = []
+        i = 0
+        while i < len(raw_args):
+            if raw_args[i] == "--reply-to" and i + 1 < len(raw_args):
+                reply_to = raw_args[i + 1]
+                i += 2
+            elif raw_args[i] == "--topic" and i + 1 < len(raw_args):
+                topic_id = raw_args[i + 1]
+                i += 2
+            else:
+                pos_args.append(raw_args[i])
+                i += 1
+        if len(pos_args) > 1 and topic_id is None and pos_args[-1].lstrip("-").isdigit():
+            topic_id = pos_args[-1]
+            pos_args = pos_args[:-1]
+        text = " ".join(pos_args)
         cmd = {"action": "send", "chat_id": chat_id, "text": text}
         if topic_id:
             cmd["topic_id"] = topic_id
+        if reply_to:
+            cmd["reply_to"] = reply_to
         print(json.dumps(send_daemon_cmd(cmd)))
     elif action in ("send_file", "send_media"):
         if len(sys.argv) < 4:
-            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py send_file <chat_id> <file_path> [caption] [reply_to]"}))
+            print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py send_file <chat_id> <file_path> [caption] [reply_to] [--reply-to <id>] [--topic <id>]"}))
             sys.exit(1)
         chat_id = sys.argv[2]
         file_path = sys.argv[3]
-        caption = sys.argv[4] if len(sys.argv) > 4 else ""
-        reply_to = sys.argv[5] if len(sys.argv) > 5 else None
-        print(json.dumps(send_daemon_cmd({
+        raw_args = sys.argv[4:]
+        caption = ""
+        reply_to = None
+        topic_id = None
+        pos_args = []
+        i = 0
+        while i < len(raw_args):
+            if raw_args[i] == "--reply-to" and i + 1 < len(raw_args):
+                reply_to = raw_args[i + 1]
+                i += 2
+            elif raw_args[i] == "--topic" and i + 1 < len(raw_args):
+                topic_id = raw_args[i + 1]
+                i += 2
+            else:
+                pos_args.append(raw_args[i])
+                i += 1
+        if len(pos_args) >= 1:
+            caption = pos_args[0]
+        if len(pos_args) >= 2 and reply_to is None:
+            reply_to = pos_args[1]
+        if len(pos_args) >= 3 and topic_id is None:
+            topic_id = pos_args[2]
+        cmd = {
             "action": "send_file",
             "chat_id": chat_id,
             "file_path": file_path,
             "caption": caption,
-            "reply_to": reply_to
-        })))
+        }
+        if reply_to:
+            cmd["reply_to"] = reply_to
+        if topic_id:
+            cmd["topic_id"] = topic_id
+        print(json.dumps(send_daemon_cmd(cmd)))
     elif action == "mark_read":
         if len(sys.argv) < 3:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py mark_read <chat_id> [topic_id]"}))

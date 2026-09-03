@@ -10,6 +10,26 @@ Item {
 
   anchors.fill: parent
 
+  function jumpToMessageId(targetId) {
+    if (!targetId || !p.activeMessages) return
+    for (var idx = 0; idx < p.activeMessages.length; idx++) {
+      if (p.activeMessages[idx].id === targetId) {
+        msgListView.positionViewAtIndex(idx, ListView.Center)
+        break
+      }
+    }
+  }
+
+  function getRepliedMessage(replyToId) {
+    if (!replyToId || !p.activeMessages) return null
+    for (var i = 0; i < p.activeMessages.length; i++) {
+      if (p.activeMessages[i].id === replyToId) {
+        return p.activeMessages[i]
+      }
+    }
+    return null
+  }
+
   // 1. Top Chat Header Bar (Anchored layout — 0 text overlap)
   BorderSurface {
     id: chatHeader
@@ -475,6 +495,13 @@ Item {
           msgListView.positionViewAtBeginning()
         })
       }
+      function onActiveMessagesChanged() {
+        if (msgListView.lastVisibleIndex <= 1 || msgListView.atYBeginning) {
+          Qt.callLater(function() {
+            msgListView.positionViewAtBeginning()
+          })
+        }
+      }
     }
 
     // Message Row Delegate
@@ -626,7 +653,7 @@ Item {
         anchors.right: msgRow.isOut ? parent.right : undefined
         anchors.rightMargin: msgRow.isOut ? Style.space(10) : 0
         anchors.top: parent.top
-        width: Math.min(msgListView.width * 0.72, Math.max(timeStatusRow.implicitWidth + Style.space(24), (modelData.media_path || modelData.media_type === "photo" || modelData.media_type === "video" || modelData.media_type === "sticker" || (modelData.webpage && modelData.webpage.photo)) ? (msgListView.width * 0.65) : (bubbleText.implicitWidth + Style.space(20))))
+        width: Math.min(msgListView.width * 0.72, Math.max(timeStatusRow.implicitWidth + Style.space(24), (modelData.reply_to_msg_id ? Style.space(160) : 0), (modelData.media_path || modelData.media_type === "photo" || modelData.media_type === "video" || modelData.media_type === "sticker" || (modelData.webpage && modelData.webpage.photo)) ? (msgListView.width * 0.65) : (bubbleText.implicitWidth + Style.space(20))))
         height: bubbleContentCol.implicitHeight + Style.space(14)
         radius: Style.space(16)
         color: msgRow.isSelected ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.35) : (msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.15))
@@ -671,6 +698,68 @@ Item {
             font.pixelSize: Style.font.caption * 0.85
             font.bold: true
             elide: Text.ElideRight
+          }
+
+          // Quoted Reply Banner inside message bubble
+          BorderSurface {
+            id: replyQuoteBox
+            visible: modelData.reply_to_msg_id !== undefined && modelData.reply_to_msg_id !== null && modelData.reply_to_msg_id > 0
+            width: parent.width
+            height: Style.space(34)
+            radius: Style.space(4)
+            color: msgRow.isOut ? Qt.rgba(0, 0, 0, 0.16) : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.08)
+            borderSpec: Border.flat(msgRow.isOut ? p.accentForeground : Color.accent, "0 0 0 2")
+
+            readonly property var targetRepliedMsg: root.getRepliedMessage(modelData.reply_to_msg_id)
+            readonly property string replySender: (modelData.reply_to_sender && modelData.reply_to_sender.length > 0) ? modelData.reply_to_sender : (targetRepliedMsg ? targetRepliedMsg.sender_name : "Message")
+            readonly property string replyText: (modelData.reply_to_text && modelData.reply_to_text.length > 0) ? modelData.reply_to_text : (targetRepliedMsg ? (targetRepliedMsg.text || (targetRepliedMsg.media_type ? "Media" : "")) : ("#" + modelData.reply_to_msg_id))
+
+            Column {
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.leftMargin: Style.space(8)
+              anchors.rightMargin: Style.space(6)
+              spacing: Style.space(1)
+
+              Text {
+                width: parent.width
+                textFormat: Text.PlainText
+                text: replyQuoteBox.replySender
+                color: msgRow.isOut ? p.accentForeground : Color.accent
+                font.family: p.fontFamily
+                font.pixelSize: Style.font.caption * 0.8
+                font.bold: true
+                elide: Text.ElideRight
+              }
+
+              Text {
+                width: parent.width
+                textFormat: Text.PlainText
+                text: replyQuoteBox.replyText
+                color: msgRow.isOut ? Qt.rgba(p.accentForeground.r, p.accentForeground.g, p.accentForeground.b, 0.85) : p.foreground
+                font.family: p.fontFamily
+                font.pixelSize: Style.font.caption * 0.78
+                elide: Text.ElideRight
+              }
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              hoverEnabled: true
+              acceptedButtons: Qt.LeftButton | Qt.RightButton
+              onClicked: function(mouse) {
+                if (mouse.button === Qt.LeftButton) {
+                  root.jumpToMessageId(modelData.reply_to_msg_id)
+                } else if (mouse.button === Qt.RightButton) {
+                  var pt = replyQuoteBox.mapToItem(root, mouse.x, mouse.y)
+                  msgContextMenu.targetMsg = modelData
+                  msgContextMenu.targetRow = msgRow
+                  msgContextMenu.showAt(pt.x, pt.y)
+                }
+              }
+            }
           }
 
           // Attached Photo Image (Click to Maximize)

@@ -21,6 +21,11 @@ Item {
         inputArea.forceActiveFocus()
       }
     }
+    function onReplyingToChanged() {
+      if (p.replyingTo) {
+        inputArea.forceActiveFocus()
+      }
+    }
   }
 
   Column {
@@ -263,6 +268,19 @@ Item {
             placeholderTextColor: p.dim
 
             Keys.onPressed: function(event) {
+              if (event.key === Qt.Key_Escape) {
+                if (p.editingMessage) {
+                  p.cancelEditingMessage()
+                  inputArea.text = ""
+                  event.accepted = true
+                  return
+                }
+                if (p.replyingTo) {
+                  p.clearReply()
+                  event.accepted = true
+                  return
+                }
+              }
               if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_V) {
                 p.checkAndPasteClipboardImage()
               }
@@ -327,7 +345,6 @@ Item {
     if (p.editingMessage) {
       p.submitEditMessage(p.selectedChat.id, p.editingMessage.id, txt)
     } else {
-      p.clearReply()
       p.sendMessageToActiveChat(txt)
     }
   }

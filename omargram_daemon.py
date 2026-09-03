@@ -5,6 +5,7 @@ import sys
 import json
 import time
 import asyncio
+import subprocess
 import signal
 import socket
 import re
@@ -41,6 +42,7 @@ try:
     from telethon.tl.functions.channels import LeaveChannelRequest
     from telethon.tl.functions.messages import DeleteChatUserRequest, ReportSpamRequest, SendReactionRequest
     from telethon.tl.functions.account import ReportPeerRequest
+    from telethon.utils import get_display_name
     import qrcode
 
 except ImportError as e:
@@ -149,13 +151,63 @@ class OmarGramDaemon:
         # Register live event listeners
         @self.client.on(events.NewMessage)
         async def message_handler(event):
+            try:
+                cid = event.chat_id
+                for ck in list(self.messages_cache.keys()):
+                    if ck.startswith(f"{cid}_") or ck == str(cid):
+                        self.messages_cache.pop(ck, None)
+                if hasattr(self, "chat_messages_cache"):
+                    self.chat_messages_cache.pop(cid, None)
+                    if str(cid).lstrip("-").isdigit():
+                        self.chat_messages_cache.pop(int(cid), None)
+            except Exception:
+                pass
             await self.update_unread_count()
             asyncio.create_task(self.refresh_dialogs_cache())
+            self.notify_shell_refresh()
+            if not event.out:
+                asyncio.create_task(self.notify_incoming_message(event))
+
+        @self.client.on(events.MessageEdited)
+        async def edit_handler(event):
+            try:
+                cid = event.chat_id
+                for ck in list(self.messages_cache.keys()):
+                    if ck.startswith(f"{cid}_") or ck == str(cid):
+                        self.messages_cache.pop(ck, None)
+                if hasattr(self, "chat_messages_cache"):
+                    self.chat_messages_cache.pop(cid, None)
+                    if str(cid).lstrip("-").isdigit():
+                        self.chat_messages_cache.pop(int(cid), None)
+            except Exception:
+                pass
+            self.notify_shell_refresh()
+
+        @self.client.on(events.MessageDeleted)
+        async def delete_handler(event):
+            try:
+                cid = getattr(event, "chat_id", None)
+                if cid:
+                    for ck in list(self.messages_cache.keys()):
+                        if ck.startswith(f"{cid}_") or ck == str(cid):
+                            self.messages_cache.pop(ck, None)
+                    if hasattr(self, "chat_messages_cache"):
+                        self.chat_messages_cache.pop(cid, None)
+                        if str(cid).lstrip("-").isdigit():
+                            self.chat_messages_cache.pop(int(cid), None)
+                else:
+                    self.messages_cache.clear()
+                    if hasattr(self, "chat_messages_cache"):
+                        self.chat_messages_cache.clear()
+            except Exception:
+                pass
+            self.notify_shell_refresh()
 
         @self.client.on(events.MessageRead)
         async def read_handler(event):
             await self.update_unread_count()
             asyncio.create_task(self.refresh_dialogs_cache())
+            self.notify_shell_refresh()
 
         # Start Unix Socket Server
         if os.path.exists(SOCK_PATH):
@@ -184,6 +236,36 @@ class OmarGramDaemon:
                 return int(fields[19])
         except Exception:
             return 0
+
+    def notify_shell_refresh(self):
+        try:
+            subprocess.Popen(["omarchy-shell", "omargram", "refresh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
+    async def notify_incoming_message(self, event):
+        try:
+            m = event.message
+            if not m or m.out:
+                return
+            cid = event.chat_id
+            sender = await event.get_sender()
+            sender_name = get_display_name(sender) or "Telegram"
+            preview = m.message or ("Media" if m.media else "New message")
+            if len(preview) > 120:
+                preview = preview[:117] + "..."
+            cmd = [
+                "omarchy-notification-send",
+                "-u", "normal",
+                "-g", "󰭹",
+                "--app-name", "OmarGram",
+                "--exec", f"omarchy-shell omargram chat {cid}",
+                sender_name,
+                preview
+            ]
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
 
     async def update_unread_count(self):
         if not await self.client.is_user_authorized():
@@ -451,7 +533,7 @@ class OmarGramDaemon:
             messages = await self.client.get_messages(entity, **kwargs)
             
             read_outbox_max_id = 0
-            chat_title = getattr(entity, "first_name", "") or getattr(entity, "title", "User")
+            chat_title = get_display_name(entity) or getattr(entity, "title", "User")
             chat_avatar = self.cached_avatars.get(cid, "")
             is_group_or_channel = isinstance(entity, (Chat, Channel))
 
@@ -466,6 +548,7 @@ class OmarGramDaemon:
                 self.cached_senders = {}
 
             result = []
+            msg_map = {m.id: m for m in messages}
             for m in messages:
                 sender_name = "You" if m.out else chat_title
                 sender_avatar = chat_avatar if not m.out else ""
@@ -480,7 +563,7 @@ class OmarGramDaemon:
                     else:
                         try:
                             sender = await self.client.get_entity(m.sender_id)
-                            sender_name = getattr(sender, "first_name", "") or getattr(sender, "title", "") or getattr(sender, "username", "") or "User"
+                            sender_name = get_display_name(sender) or getattr(sender, "username", "") or "User"
                             sender_color = get_avatar_color(sender_name)
                             self.cached_senders[m.sender_id] = {"name": sender_name, "avatar": "", "color": sender_color}
                         except Exception:
@@ -616,6 +699,25 @@ class OmarGramDaemon:
                                 "chosen": is_chosen
                             })
 
+                reply_to_id = None
+                if m.reply_to:
+                    is_forum = getattr(m.reply_to, "forum_topic", False)
+                    r_msg_id = getattr(m.reply_to, "reply_to_msg_id", None)
+                    top_id = getattr(m.reply_to, "reply_to_top_id", None)
+                    if is_forum:
+                        if top_id and r_msg_id and r_msg_id != top_id:
+                            reply_to_id = r_msg_id
+                    else:
+                        reply_to_id = r_msg_id
+
+                reply_to_sender = ""
+                reply_to_text = getattr(m.reply_to, "quote_text", "") or "" if m.reply_to else ""
+                if reply_to_id and reply_to_id in msg_map:
+                    target_m = msg_map[reply_to_id]
+                    if not reply_to_text:
+                        reply_to_text = target_m.message or (format_message_action(target_m) if getattr(target_m, "action", None) else ("Media" if target_m.media else ""))
+                    reply_to_sender = "You" if target_m.out else (self.cached_senders.get(target_m.sender_id, {}).get("name") or chat_title)
+
                 result.append({
                     "id": m.id,
                     "chat_id": cid,
@@ -638,7 +740,9 @@ class OmarGramDaemon:
                     "media_thumb": media_thumb,
                     "media_info": media_info,
                     "webpage": webpage_meta,
-                    "reply_to_msg_id": m.reply_to_msg_id if hasattr(m, "reply_to_msg_id") else None
+                    "reply_to_msg_id": reply_to_id,
+                    "reply_to_sender": reply_to_sender,
+                    "reply_to_text": reply_to_text
                 })
             
             if not hasattr(self, 'chat_messages_cache'):
@@ -649,15 +753,16 @@ class OmarGramDaemon:
             print(f"Error fetching messages for {chat_id}: {e}", file=sys.stderr)
             return getattr(self, 'chat_messages_cache', {}).get(int(chat_id) if str(chat_id).isdigit() else 0, [])
 
-    async def send_message_to_chat(self, chat_id, text, topic_id=None):
+    async def send_message_to_chat(self, chat_id, text, topic_id=None, reply_to=None):
         if not await self.client.is_user_authorized():
             return {"success": False, "error": "Not authorized"}
         try:
             cid = int(chat_id)
             entity = await self.client.get_entity(cid)
             kwargs = {}
-            if topic_id:
-                kwargs["reply_to"] = int(topic_id)
+            rep_id = int(reply_to) if (reply_to and str(reply_to).lstrip("-").isdigit()) else (int(topic_id) if (topic_id and str(topic_id).lstrip("-").isdigit()) else None)
+            if rep_id is not None:
+                kwargs["reply_to"] = rep_id
             sent = await self.client.send_message(entity, text, **kwargs)
             # Invalidate message cache so next fetch includes the new message
             cache_key = f"{chat_id}_{topic_id or '0'}"
@@ -669,7 +774,7 @@ class OmarGramDaemon:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def send_file_to_chat(self, chat_id, file_path, caption="", reply_to=None):
+    async def send_file_to_chat(self, chat_id, file_path, caption="", reply_to=None, topic_id=None):
         if not await self.client.is_user_authorized():
             return {"success": False, "error": "Not authorized"}
         try:
@@ -677,8 +782,11 @@ class OmarGramDaemon:
             entity = await self.client.get_entity(cid)
             if not os.path.exists(file_path):
                 return {"success": False, "error": f"File not found: {file_path}"}
-            rep_id = int(reply_to) if (reply_to and str(reply_to).isdigit()) else None
-            sent = await self.client.send_file(entity, file_path, caption=caption or None, reply_to=rep_id)
+            rep_id = int(reply_to) if (reply_to and str(reply_to).lstrip("-").isdigit()) else (int(topic_id) if (topic_id and str(topic_id).lstrip("-").isdigit()) else None)
+            kwargs = {}
+            if rep_id is not None:
+                kwargs["reply_to"] = rep_id
+            sent = await self.client.send_file(entity, file_path, caption=caption or None, **kwargs)
             # Invalidate message cache so next fetch includes the new file
             for ck in list(self.messages_cache.keys()):
                 if ck.startswith(f"{chat_id}_"):
@@ -1087,7 +1195,7 @@ class OmarGramDaemon:
             cache_key = f"{chat_id}_{topic_id or '0'}"
             import time as _time
             cached = self.messages_cache.get(cache_key)
-            if cached and (_time.time() - cached[1]) < 30:
+            if cached and (_time.time() - cached[1]) < 1.5:
                 return {"success": True, "chat_id": chat_id, "messages": cached[0]}
             # Fetch messages first (fast), then merge pinned from cache
             msgs = await self.get_messages_for_chat(chat_id, lim, topic_id=topic_id)
@@ -1119,14 +1227,16 @@ class OmarGramDaemon:
             chat_id = cmd_dict.get("chat_id")
             text = cmd_dict.get("text", "")
             topic_id = cmd_dict.get("topic_id")
-            return await self.send_message_to_chat(chat_id, text, topic_id=topic_id)
+            reply_to = cmd_dict.get("reply_to")
+            return await self.send_message_to_chat(chat_id, text, topic_id=topic_id, reply_to=reply_to)
 
         elif action in ("send_file", "send_media"):
             chat_id = cmd_dict.get("chat_id")
             file_path = cmd_dict.get("file_path", "")
             caption = cmd_dict.get("caption", "") or cmd_dict.get("text", "")
             reply_to = cmd_dict.get("reply_to")
-            return await self.send_file_to_chat(chat_id, file_path, caption, reply_to)
+            topic_id = cmd_dict.get("topic_id")
+            return await self.send_file_to_chat(chat_id, file_path, caption, reply_to=reply_to, topic_id=topic_id)
 
         elif action == "download_media":
             chat_id = cmd_dict.get("chat_id")
