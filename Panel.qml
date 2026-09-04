@@ -1027,8 +1027,14 @@ Panel {
             root.messagesCache[respKey] = d.messages
             // Only update if this response is for the chat we're currently viewing
             if (root.selectedChat && (respKey === root._loadingChatKey || String(root.selectedChat.id) === String(d.chat_id))) {
-              root._lastMsgDigest = JSON.stringify(d.messages || [])
-              root.activeMessages = d.messages || []
+              var digest = JSON.stringify(d.messages || [])
+              // Skip reassigning activeMessages when nothing changed: a JS-array
+              // model reassignment resets the ListView's contentY, which snaps the
+              // view back to the latest message every poll (1500ms) and breaks scrolling.
+              if (digest !== root._lastMsgDigest) {
+                root._lastMsgDigest = digest
+                root.activeMessages = d.messages || []
+              }
               root.messagesLoaded = true
               root.loadingMessages = false
             }

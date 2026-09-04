@@ -547,7 +547,9 @@ Item {
       active: root.mediaType === "video" && root.mediaPath !== "" && !root.isDownloading
       visible: active
       anchors.fill: parent
-      z: 10001
+      // z below the toolbars (z: 50) so the close button and video controls
+      // stay clickable when the video layer is active.
+      z: 40
 
       onLoaded: {
         if (item && item.vp && root.mediaPath !== "") {
