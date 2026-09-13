@@ -17,6 +17,11 @@ Item {
   property bool waitingForCode: false
   property bool waitingFor2Fa: false
   property string authError: ""
+  property bool submittingCode: false
+
+  onWaitingForCodeChanged: root.submittingCode = false
+  onWaitingFor2FaChanged: root.submittingCode = false
+  onAuthErrorChanged: if (root.authError !== "") root.submittingCode = false
 
   Column {
     anchors.centerIn: parent
@@ -72,7 +77,7 @@ Item {
         id: qrImage
         anchors.fill: parent
         anchors.margins: Style.space(8)
-        source: p.qrPath ? "file://" + p.qrPath + "?v=" + p.qrTimestamp : ""
+        source: p.qrPath ? "file://" + p.qrPath : ""
         fillMode: Image.PreserveAspectFit
         cache: false
       }
@@ -171,6 +176,7 @@ Item {
         radius: Style.cornerRadius
         color: Color.accent
         borderSpec: Border.none
+        opacity: root.submittingCode ? 0.6 : 1
 
         Text {
           anchors.centerIn: parent
@@ -184,11 +190,16 @@ Item {
 
         MouseArea {
           anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+          enabled: !root.submittingCode
           onClicked: {
             root.authError = ""
             if (root.waitingFor2Fa) {
+              if (root.submittingCode) return
+              root.submittingCode = true
               p.submitCode(root.authCode, root.twoFaPassword)
             } else if (root.waitingForCode) {
+              if (root.submittingCode) return
+              root.submittingCode = true
               p.submitCode(root.authCode, "")
             } else {
               if (!root.phoneNumber.startsWith("+")) {
@@ -230,6 +241,12 @@ Item {
         anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
         onClicked: {
           root.authMode = root.authMode === "qr" ? "phone" : "qr"
+          root.waitingForCode = false
+          root.waitingFor2Fa = false
+          root.authCode = ""
+          root.twoFaPassword = ""
+          root.authError = ""
+          root.submittingCode = false
           if (root.authMode === "qr") p.startQrLogin()
         }
       }

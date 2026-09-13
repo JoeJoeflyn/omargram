@@ -2,7 +2,9 @@
 """OmarGram CLI controller — communicates with OmarGram background daemon over local UNIX socket."""
 import os
 import sys
+import fcntl
 import json
+import re
 import time
 import socket
 import subprocess
@@ -32,7 +34,8 @@ def is_daemon_running():
 def get_proc_starttime(pid):
     try:
         with open(f"/proc/{pid}/stat", "r") as f:
-            fields = f.read().split(")")[1].split()
+            data = f.read()
+            fields = data[data.rfind(")") + 1:].split()
             return int(fields[19])
     except Exception:
         return None
@@ -44,8 +47,8 @@ def is_omargram_proc(pid, expected_starttime=None):
             if st != expected_starttime:
                 return False
         with open(f"/proc/{pid}/cmdline", "r") as f:
-            cmdline = f.read()
-            return "omargram_daemon.py" in cmdline
+            cmdline = f.read().replace("\x00", " ")
+            return re.search(r"(^|/)omargram_daemon\.py(\s|$)", cmdline) is not None
     except Exception:
         return False
 
@@ -58,6 +61,7 @@ def stop_daemon():
             pass
     # 2. Check PID file and verify starttime + cmdline before sending signal
     if os.path.exists(PID_PATH):
+        still_alive = False
         try:
             with open(PID_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -73,15 +77,19 @@ def stop_daemon():
                     else:
                         if is_omargram_proc(pid, expected_st):
                             os.kill(pid, signal.SIGKILL)
+                    time.sleep(0.1)
+                    still_alive = is_omargram_proc(pid, expected_st)
         except Exception:
             pass
+        if still_alive:
+            return {"success": False, "error": "daemon still running"}
         try:
             if os.path.exists(PID_PATH):
                 os.unlink(PID_PATH)
         except Exception:
             pass
         try:
-            if os.path.exists(SOCK_PATH):
+            if os.path.exists(SOCK_PATH) and not is_daemon_running():
                 os.unlink(SOCK_PATH)
         except Exception:
             pass
@@ -120,6 +128,20 @@ def ensure_daemon_running():
     os.makedirs(OMARGRAM_RUN_DIR, mode=0o700, exist_ok=True)
     try:
         os.chmod(OMARGRAM_RUN_DIR, 0o700)
+    except Exception:
+        pass
+    try:
+        lock_fh = open(os.path.join(OMARGRAM_RUN_DIR, "omargram.lock"), "w")
+        try:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (OSError, IOError):
+            # Another process is starting the daemon; wait for its socket.
+            for _ in range(60):
+                time.sleep(0.1)
+                if is_daemon_running():
+                    return True
+            return False
+        ensure_daemon_running._lock_fh = lock_fh
     except Exception:
         pass
     daemon_script = get_daemon_script_path()
@@ -211,7 +233,17 @@ def extract_clipboard_image():
                 "file_size": os.path.getsize(filepath),
                 "mime": target_type
             }
+        try:
+            if os.path.exists(filepath):
+                os.unlink(filepath)
+        except Exception:
+            pass
     except Exception as e:
+        try:
+            if os.path.exists(filepath):
+                os.unlink(filepath)
+        except Exception:
+            pass
         return {"success": False, "error": str(e)}
     return {"success": True, "has_image": False}
 
@@ -385,14 +417,22 @@ def main():
     elif action == "pick_file":
         print(json.dumps(pick_file_dialog()))
     elif action in ("dialogs", "chats"):
-        limit = int(sys.argv[2]) if len(sys.argv) > 2 else 40
+        try:
+            limit = int(sys.argv[2]) if len(sys.argv) > 2 else 40
+        except ValueError:
+            print(json.dumps({"success": False, "error": "limit must be an integer"}))
+            sys.exit(1)
         print(json.dumps(send_daemon_cmd({"action": "dialogs", "limit": limit})))
     elif action == "messages":
         if len(sys.argv) < 3:
             print(json.dumps({"success": False, "error": "Usage: omargram_ctl.py messages <chat_id> [limit] [topic_id]"}))
             sys.exit(1)
         chat_id = sys.argv[2]
-        limit = int(sys.argv[3]) if len(sys.argv) > 3 else 50
+        try:
+            limit = int(sys.argv[3]) if len(sys.argv) > 3 else 50
+        except ValueError:
+            print(json.dumps({"success": False, "error": "limit must be an integer"}))
+            sys.exit(1)
         topic_id = sys.argv[4] if len(sys.argv) > 4 else None
         cmd = {"action": "messages", "chat_id": chat_id, "limit": limit}
         if topic_id:

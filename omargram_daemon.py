@@ -55,7 +55,14 @@ def load_config():
         try:
             with open(cfg_file, "r", encoding="utf-8") as f:
                 d = json.load(f)
-                return d.get("api_id", DEFAULT_API_ID), d.get("api_hash", DEFAULT_API_HASH)
+                raw_id = d.get("api_id", DEFAULT_API_ID)
+                try:
+                    api_id = int(raw_id)
+                except (ValueError, TypeError):
+                    raise ValueError(f"config.json api_id must be an integer, got {raw_id!r}")
+                return api_id, d.get("api_hash", DEFAULT_API_HASH)
+        except ValueError:
+            raise
         except Exception:
             pass
     return DEFAULT_API_ID, DEFAULT_API_HASH
@@ -128,11 +135,20 @@ class OmarGramDaemon:
         self.phone_code_hash = None
         self.phone_number = None
         self.running = True
+        self._auth_busy = False
+        self._qr_wait_task = None
         self.dialogs_cache = []
         self.unread_total = 0
         self.cached_avatars = {}
         self.pinned_cache = {}  # chat_id -> list of pinned msgs
         self.messages_cache = {}  # "chat_id_topic_id" -> (msgs, timestamp)
+
+    def _cache_sender(self, uid, val):
+        if not hasattr(self, 'cached_senders') or self.cached_senders is None:
+            self.cached_senders = {}
+        self.cached_senders[uid] = val
+        while len(self.cached_senders) > 2000:
+            self.cached_senders.pop(next(iter(self.cached_senders)), None)
 
     async def start(self):
         # Save PID file with strict permissions
@@ -219,8 +235,8 @@ class OmarGramDaemon:
         server = await asyncio.start_unix_server(self.handle_client, path=SOCK_PATH)
         try:
             os.chmod(SOCK_PATH, 0o600)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: chmod {SOCK_PATH} failed: {e}", file=sys.stderr)
 
         print(f"OmarGram daemon listening on {SOCK_PATH}")
         asyncio.create_task(self.refresh_dialogs_cache())
@@ -232,8 +248,9 @@ class OmarGramDaemon:
     def get_my_starttime(self):
         try:
             with open(f"/proc/{os.getpid()}/stat", "r") as f:
-                fields = f.read().split(")")[1].split()
-                return int(fields[19])
+                stat = f.read()
+                rest = stat[stat.rfind(")") + 1:].split()
+                return int(rest[19])
         except Exception:
             return 0
 
@@ -299,8 +316,8 @@ class OmarGramDaemon:
                     pass
                 self.cached_avatars[ent_id] = path
                 return path
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error fetching avatar for {getattr(entity, 'id', '?')}: {e}", file=sys.stderr)
         return ""
 
     async def refresh_dialogs_cache(self, limit=40):
@@ -430,8 +447,8 @@ class OmarGramDaemon:
                         pass
                     return path
             return target_path
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error downloading media to {target_path}: {e}", file=sys.stderr)
         return ""
 
     async def get_pinned_messages(self, chat_id, topic_id=None):
@@ -468,16 +485,43 @@ class OmarGramDaemon:
                             sender_name = getattr(sender, "first_name", "") or getattr(sender, "title", "") or getattr(sender, "username", "") or "User"
                             sender_avatar = ""
                             sender_color = get_avatar_color(sender_name)
-                            self.cached_senders[m.sender_id] = {"name": sender_name, "avatar": sender_avatar, "color": sender_color}
+                            self._cache_sender(m.sender_id, {"name": sender_name, "avatar": sender_avatar, "color": sender_color})
                         except Exception:
                             pass
                 text = m.message or ""
-                if not text and m.media:
-                    text = "📎 Media"
                 # Handle webpage metadata for pinned messages
                 webpage_meta = None
                 media_type = ""
                 media_path = ""
+                if m.media and isinstance(m.media, MessageMediaPhoto):
+                    media_type = "photo"
+                    photo_f = os.path.join(MEDIA_DIR, f"photo_{m.id}_{cid}.jpg")
+                    if os.path.exists(photo_f):
+                        media_path = photo_f
+                    else:
+                        asyncio.create_task(self.download_media_bg(m.media, photo_f))
+                elif m.media and isinstance(m.media, MessageMediaDocument):
+                    doc = getattr(m.media, "document", None)
+                    mime = getattr(doc, "mime_type", "") if doc else ""
+                    attrs = getattr(doc, "attributes", []) if doc else []
+                    if "audio" in mime or "ogg" in mime or any(isinstance(a, DocumentAttributeAudio) for a in attrs):
+                        media_type = "voice"
+                    elif "video" in mime or any(isinstance(a, DocumentAttributeVideo) for a in attrs):
+                        media_type = "video"
+                        video_f = os.path.join(MEDIA_DIR, f"video_{m.id}_{cid}.mp4")
+                        if os.path.exists(video_f) and os.path.getsize(video_f) > 0:
+                            media_path = video_f
+                    elif "webp" in mime:
+                        media_type = "sticker"
+                        sticker_f = os.path.join(MEDIA_DIR, f"sticker_{m.id}_{cid}.webp")
+                        if os.path.exists(sticker_f):
+                            media_path = sticker_f
+                        else:
+                            asyncio.create_task(self.download_media_bg(m.media, sticker_f))
+                    else:
+                        media_type = "document"
+                if not text and m.media:
+                    text = {"photo": "📷 Photo", "video": "🎬 Video", "voice": "🎤 Voice message", "sticker": "🌟 Sticker"}.get(media_type, "📎 Media")
                 if m.media and isinstance(m.media, MessageMediaWebPage):
                     wp = m.media.webpage
                     if isinstance(wp, (WebPage, WebPagePending, WebPageEmpty)):
@@ -517,6 +561,8 @@ class OmarGramDaemon:
                     "webpage": webpage_meta,
                 })
             self.pinned_cache[cid] = result
+            while len(self.pinned_cache) > 100:
+                self.pinned_cache.pop(next(iter(self.pinned_cache)), None)
             return result
         except Exception:
             return []
@@ -565,7 +611,7 @@ class OmarGramDaemon:
                             sender = await self.client.get_entity(m.sender_id)
                             sender_name = get_display_name(sender) or getattr(sender, "username", "") or "User"
                             sender_color = get_avatar_color(sender_name)
-                            self.cached_senders[m.sender_id] = {"name": sender_name, "avatar": "", "color": sender_color}
+                            self._cache_sender(m.sender_id, {"name": sender_name, "avatar": "", "color": sender_color})
                         except Exception:
                             sender_name = "User"
 
@@ -751,7 +797,7 @@ class OmarGramDaemon:
             return result
         except Exception as e:
             print(f"Error fetching messages for {chat_id}: {e}", file=sys.stderr)
-            return getattr(self, 'chat_messages_cache', {}).get(int(chat_id) if str(chat_id).isdigit() else 0, [])
+            return getattr(self, 'chat_messages_cache', {}).get(int(chat_id) if str(chat_id).lstrip("-").isdigit() else 0, [])
 
     async def send_message_to_chat(self, chat_id, text, topic_id=None, reply_to=None):
         if not await self.client.is_user_authorized():
@@ -812,7 +858,7 @@ class OmarGramDaemon:
                 await self.client(ReadDiscussionRequest(peer=entity, msg_id=int(topic_id), read_max_id=read_max_id))
             else:
                 await self.client.send_read_acknowledge(entity)
-            for d in self.dialogs_cache:
+            for d in list(self.dialogs_cache):
                 if d.get("id") == cid:
                     d["unread_count"] = 0
             await self.update_unread_count()
@@ -987,6 +1033,11 @@ class OmarGramDaemon:
                 entity = await self.client.get_entity(cid)
                 await self.client.pin_message(entity, mid, notify=True)
                 self.pinned_cache.pop(cid, None)
+                for ck in list(self.messages_cache.keys()):
+                    if ck == str(chat_id) or ck.startswith(f"{chat_id}_"):
+                        self.messages_cache.pop(ck, None)
+                if cid in getattr(self, "chat_messages_cache", {}):
+                    del self.chat_messages_cache[cid]
                 return {"success": True, "chat_id": cid, "message_id": mid}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -996,12 +1047,19 @@ class OmarGramDaemon:
             msg_id = cmd_dict.get("message_id")
             if not chat_id:
                 return {"success": False, "error": "chat_id required"}
+            if not msg_id:
+                return {"success": False, "error": "message_id required for unpin"}
             try:
                 cid = int(chat_id)
                 entity = await self.client.get_entity(cid)
-                mid = int(msg_id) if msg_id else None
+                mid = int(msg_id)
                 await self.client.unpin_message(entity, mid)
                 self.pinned_cache.pop(cid, None)
+                for ck in list(self.messages_cache.keys()):
+                    if ck == str(chat_id) or ck.startswith(f"{chat_id}_"):
+                        self.messages_cache.pop(ck, None)
+                if cid in getattr(self, "chat_messages_cache", {}):
+                    del self.chat_messages_cache[cid]
                 return {"success": True, "chat_id": cid}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -1019,6 +1077,9 @@ class OmarGramDaemon:
                 t_entity = await self.client.get_entity(tcid)
                 mids = [int(m) for m in msg_ids if str(m).isdigit()]
                 await self.client.forward_messages(t_entity, mids, f_entity)
+                for ck in list(self.messages_cache.keys()):
+                    if ck == str(to_chat_id) or ck.startswith(f"{to_chat_id}_"):
+                        self.messages_cache.pop(ck, None)
                 if tcid in getattr(self, "chat_messages_cache", {}):
                     del self.chat_messages_cache[tcid]
                 return {"success": True, "to_chat_id": tcid, "forwarded_count": len(mids)}
@@ -1039,6 +1100,9 @@ class OmarGramDaemon:
                 entity = await self.client.get_entity(cid)
                 reaction_list = [ReactionEmoji(emoticon=emoticon)] if emoticon else []
                 await self.client(SendReactionRequest(peer=entity, msg_id=mid, reaction=reaction_list))
+                for ck in list(self.messages_cache.keys()):
+                    if ck == str(chat_id) or ck.startswith(f"{chat_id}_"):
+                        self.messages_cache.pop(ck, None)
                 if cid in getattr(self, "chat_messages_cache", {}):
                     del self.chat_messages_cache[cid]
                 return {"success": True, "chat_id": cid, "message_id": mid, "emoticon": emoticon}
@@ -1128,7 +1192,7 @@ class OmarGramDaemon:
                                     try:
                                         sender = await self.client.get_entity(sid)
                                         last_sender = getattr(sender, "first_name", "") or getattr(sender, "title", "") or getattr(sender, "username", "") or "User"
-                                        self.cached_senders[sid] = {"name": last_sender, "avatar": "", "color": get_avatar_color(last_sender)}
+                                        self._cache_sender(sid, {"name": last_sender, "avatar": "", "color": get_avatar_color(last_sender)})
                                     except Exception:
                                         last_sender = chat_title
                                 else:
@@ -1173,13 +1237,17 @@ class OmarGramDaemon:
                             ck = f"{chat_id}_{topics[0]['id']}"
                             import time as _t
                             self.messages_cache[ck] = (msgs, _t.time())
+                            while len(self.messages_cache) > 200:
+                                self.messages_cache.pop(next(iter(self.messages_cache)), None)
                         except Exception:
                             pass
                     asyncio.create_task(prefetch())
                 return {"success": True, "chat_id": chat_id, "topics": topics}
             except Exception as e:
-                # Not a forum or topics not supported — return empty gracefully
-                return {"success": True, "chat_id": chat_id, "topics": []}
+                # Not a forum — return empty gracefully; real errors surface as failure
+                if "forum" in str(e).lower():
+                    return {"success": True, "chat_id": chat_id, "topics": []}
+                return {"success": False, "error": str(e), "chat_id": chat_id, "topics": []}
 
         if action == "dialogs":
             lim = int(cmd_dict.get("limit", 40))
@@ -1221,6 +1289,8 @@ class OmarGramDaemon:
             else:
                 asyncio.create_task(self.get_pinned_messages(chat_id))
             self.messages_cache[cache_key] = (msgs, _time.time())
+            while len(self.messages_cache) > 200:
+                self.messages_cache.pop(next(iter(self.messages_cache)), None)
             return {"success": True, "chat_id": chat_id, "messages": msgs}
 
         elif action == "send":
@@ -1288,6 +1358,12 @@ class OmarGramDaemon:
             if await self.client.is_user_authorized():
                 return {"success": True, "already_logged_in": True}
             try:
+                prev = getattr(self, "_qr_wait_task", None)
+                if prev is not None and not prev.done():
+                    try:
+                        prev.cancel()
+                    except Exception:
+                        pass
                 self.qr_login_obj = await self.client.qr_login()
                 img = qrcode.make(self.qr_login_obj.url)
                 img.save(QR_PATH)
@@ -1295,13 +1371,16 @@ class OmarGramDaemon:
                     os.chmod(QR_PATH, 0o600)
                 except Exception:
                     pass
-                asyncio.create_task(self.wait_for_qr())
+                self._qr_wait_task = asyncio.create_task(self.wait_for_qr())
                 return {"success": True, "qr_path": QR_PATH, "url": self.qr_login_obj.url}
             except Exception as e:
                 return {"success": False, "error": str(e)}
 
         elif action == "send_code":
+            if self._auth_busy:
+                return {"success": False, "error": "auth already in progress"}
             phone = cmd_dict.get("phone", "").strip()
+            self._auth_busy = True
             self.phone_number = phone
             try:
                 res = await self.client.send_code_request(phone)
@@ -1309,10 +1388,15 @@ class OmarGramDaemon:
                 return {"success": True, "phone": phone}
             except Exception as e:
                 return {"success": False, "error": str(e)}
+            finally:
+                self._auth_busy = False
 
         elif action == "submit_code":
+            if self._auth_busy:
+                return {"success": False, "error": "auth already in progress"}
             code = cmd_dict.get("code", "").strip()
             password = cmd_dict.get("password", "").strip()
+            self._auth_busy = True
             try:
                 if self.phone_number and self.phone_code_hash:
                     await self.client.sign_in(self.phone_number, code, phone_code_hash=self.phone_code_hash)
@@ -1326,14 +1410,23 @@ class OmarGramDaemon:
                     asyncio.create_task(self.refresh_dialogs_cache())
                     return {"success": True}
                 return {"success": False, "requires_password": True}
+            except types.errors.PhoneCodeExpiredError:
+                return {"success": False, "error": "code expired — request a new code"}
             except Exception as e:
                 return {"success": False, "error": str(e)}
+            finally:
+                self._auth_busy = False
 
         elif action == "logout":
             try:
                 await self.client.log_out()
                 self.dialogs_cache = []
                 self.unread_total = 0
+                self.cached_avatars.clear()
+                self.pinned_cache.clear()
+                self.messages_cache.clear()
+                getattr(self, "chat_messages_cache", {}).clear()
+                getattr(self, "cached_senders", {}).clear()
                 return {"success": True}
             except Exception as e:
                 return {"success": False, "error": str(e)}
@@ -1378,7 +1471,20 @@ class OmarGramDaemon:
 
 if __name__ == "__main__":
     daemon = OmarGramDaemon()
+
+    def _graceful_shutdown(signum, frame):
+        daemon.running = False
+
+    try:
+        signal.signal(signal.SIGTERM, _graceful_shutdown)
+    except Exception:
+        pass
     try:
         asyncio.run(daemon.start())
     except KeyboardInterrupt:
-        pass
+        daemon.running = False
+    finally:
+        try:
+            asyncio.run(daemon.client.disconnect())
+        except Exception:
+            pass

@@ -19,7 +19,12 @@ Item {
         inputArea.text = p.editingMessage.text || ""
         inputArea.cursorPosition = inputArea.text.length
         inputArea.forceActiveFocus()
+      } else {
+        inputArea.text = ""
       }
+    }
+    function onComposerResetSeqChanged() {
+      inputArea.text = ""
     }
     function onReplyingToChanged() {
       if (p.replyingTo) {
@@ -289,6 +294,7 @@ Item {
             Keys.onReturnPressed: function(event) {
               if (event.modifiers & Qt.ShiftModifier) {
                 inputArea.insert(inputArea.cursorPosition, "\n")
+                event.accepted = true
               } else {
                 event.accepted = true
                 root.sendMessage()

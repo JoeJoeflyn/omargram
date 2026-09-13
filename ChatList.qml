@@ -659,7 +659,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               textFormat: Text.PlainText
               text: modelData.title || "Chat"
-              color: (modelData.unread_count > 0 && !chatRow.isSelected || isSelected) ? p.foreground : Qt.darker(p.foreground, 1.2)
+              color: ((modelData.unread_count > 0 && !chatRow.isSelected) || isSelected) ? p.foreground : Qt.darker(p.foreground, 1.2)
               font.family: p.fontFamily
               font.pixelSize: Style.font.bodySmall
               font.bold: (modelData.unread_count > 0 && !chatRow.isSelected) || isSelected
@@ -787,6 +787,14 @@ Item {
     function showAt(px, py) {
       menuX = Math.max(8, Math.min(px, root.width - menuBox.width - 8))
       menuY = Math.max(8, Math.min(py, root.height - menuBox.implicitHeight - 8))
+      // Expand the dismiss backdrop to cover the whole panel window, not just the sidebar
+      if (p) {
+        var tl = p.mapToItem(contextMenu, 0, 0)
+        dismissBackdrop.x = tl.x
+        dismissBackdrop.y = tl.y
+        dismissBackdrop.width = p.width
+        dismissBackdrop.height = p.height
+      }
     }
 
     function hide() {
@@ -795,7 +803,9 @@ Item {
 
     // Dismiss backdrop
     MouseArea {
-      anchors.fill: parent
+      id: dismissBackdrop
+      width: parent.width
+      height: parent.height
       acceptedButtons: Qt.LeftButton | Qt.RightButton
       onClicked: contextMenu.hide()
     }

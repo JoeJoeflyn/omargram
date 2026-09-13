@@ -38,12 +38,12 @@ Item {
       root.panY = 0
       if (root.mediaType === "video") {
         // videoPlayer.source/play handled by videoCoreLoader.onLoaded when the Loader activates
-        if (root.messageData && root.messageData.chat_id && root.messageData.id) {
+        if (root.messageData && root.messageData.chat_id && root.messageData.id && !root.messageData.media_path) {
           root.isDownloading = (root.mediaPath === "")
           p.downloadMedia(root.messageData.chat_id, root.messageData.id, "video")
         }
       } else if (root.mediaType === "photo") {
-        if (root.messageData && root.messageData.chat_id && root.messageData.id) {
+        if (root.messageData && root.messageData.chat_id && root.messageData.id && !root.messageData.media_path) {
           p.downloadMedia(root.messageData.chat_id, root.messageData.id, "photo")
         }
       }
@@ -61,6 +61,9 @@ Item {
   Connections {
     target: p
     function onActiveMediaViewerChanged() {
+      if ((!p.activeMediaViewer || p.activeMediaViewer.type !== "video") && videoPlayer) {
+        videoPlayer.stop()
+      }
       if (p.activeMediaViewer) {
         if (p.activeMediaViewer.path && p.activeMediaViewer.path !== "") {
           root.isDownloading = false
@@ -92,6 +95,7 @@ Item {
     if (videoPlayer && videoPlayer.playbackState === MediaPlayer.PlayingState) {
       videoPlayer.stop()
     }
+    root.isDownloading = false
     p.closeMediaViewer()
   }
 
@@ -349,8 +353,8 @@ Item {
       id: contentArea
       anchors.top: topToolbar.bottom
       anchors.topMargin: Style.space(8)
-      anchors.bottom: (root.mediaType === "video" && videoControlsBar.visible) ? videoControlsBar.top : parent.bottom
-      anchors.bottomMargin: (root.mediaType === "video" && videoControlsBar.visible) ? Style.space(8) : 0
+      anchors.bottom: parent.bottom
+      anchors.bottomMargin: root.mediaType === "video" ? Style.space(48) : 0
       anchors.left: parent.left
       anchors.right: parent.right
       clip: true
@@ -379,7 +383,7 @@ Item {
 
         // Photo loading indicator if image file is downloading
         BorderSurface {
-          visible: root.isDownloading || (mainImg.status === Image.Loading)
+          visible: root.isDownloading || (mainImg.status === Image.Loading) || (mainImg.status === Image.Error)
           anchors.centerIn: parent
           width: Style.space(180)
           height: Style.space(90)

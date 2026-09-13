@@ -72,7 +72,7 @@ Panel {
     var thm = (msgData && msgData.media_thumb) ? msgData.media_thumb : pth
     if (!pth && msgData && msgData.id && msgData.chat_id) {
       var ext = (type === "video") ? ".mp4" : ((type === "sticker") ? ".webp" : ".jpg")
-      pth = "/home/giogio/.cache/omargram/media/" + (type || "photo") + "_" + msgData.id + "_" + msgData.chat_id + ext
+      pth = Quickshell.env("HOME") + "/.cache/omargram/media/" + (type || "photo") + "_" + msgData.id + "_" + msgData.chat_id + ext
     }
     activeMediaViewer = {
       path: pth,
@@ -89,6 +89,7 @@ Panel {
 
   function downloadMedia(chatId, messageId, mediaType) {
     if (!chatId || !messageId) return
+    _dlTopicId = activeTopic ? String(activeTopic.id) : ""
     downloadMediaProc.running = false
     downloadMediaProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "download_media", String(chatId), String(messageId), mediaType || "video"]
     downloadMediaProc.running = true
@@ -178,6 +179,7 @@ Panel {
     // Background refresh — don't show loading spinner
     if (selectedChat) {
       _loadingChatKey = String(selectedChat.id) + (activeTopic ? "_" + String(activeTopic.id) : "")
+      _loadingTopicId = activeTopic ? String(activeTopic.id) : ""
       messagesProc.running = false
       var args = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "messages", String(selectedChat.id), "50"]
       if (activeTopic) args.push(String(activeTopic.id))
@@ -190,6 +192,9 @@ Panel {
 
   function selectChat(chat) {
     if (!chat) return
+    replyingTo = null
+    editingMessage = null
+    composerResetSeq++
     // Same chat clicked — just reopen topic list for forum chats
     if (selectedChat && selectedChat.id === chat.id) {
       if (chat.is_forum) {
@@ -258,6 +263,9 @@ Panel {
   }
 
   property var replyingTo: null
+  property int composerResetSeq: 0
+  property double _optimisticSeq: 0
+  property var _pendingChatId: null
 
   // ---- Forum Topics
   property var forumTopics: []
@@ -316,10 +324,11 @@ Panel {
 
   function selectTopic(topic) {
     activeTopic = topic
+    var cacheKey = ""
     if (selectedChat) {
       lastTopicPerChat[String(selectedChat.id)] = topic.id
+      cacheKey = String(selectedChat.id) + "_" + String(topic.id)
     }
-    var cacheKey = String(selectedChat.id) + "_" + String(topic.id)
     if (messagesCache[cacheKey]) {
       activeMessages = messagesCache[cacheKey]
       loadingMessages = false
@@ -337,7 +346,7 @@ Panel {
 
   function clearTopic() {
     activeTopic = null
-    var cacheKey = String(selectedChat.id)
+    var cacheKey = selectedChat ? String(selectedChat.id) : ""
     if (messagesCache[cacheKey]) {
       activeMessages = messagesCache[cacheKey]
       loadingMessages = false
@@ -417,7 +426,8 @@ Panel {
     actionProc.running = true
 
     allChats = allChats.filter(function(c) { return c.id !== chatId })
-    if (messagesCache[chatId]) delete messagesCache[chatId]
+    var rsk = String(chatId)
+    for (var rk in messagesCache) { if (rk.indexOf(rsk + "_") === 0 || rk === rsk) delete messagesCache[rk] }
     if (selectedChat && selectedChat.id === chatId) {
       closeActiveChat()
     }
@@ -467,8 +477,9 @@ Panel {
       updated.push(m)
     }
     activeMessages = updated
-    if (messagesCache[chatId]) {
-      messagesCache[chatId] = updated
+    var ek = String(chatId) + (activeTopic ? "_" + String(activeTopic.id) : "")
+    if (messagesCache[ek]) {
+      messagesCache[ek] = updated
     }
   }
 
@@ -486,7 +497,8 @@ Panel {
       updated.push(m)
     }
     activeMessages = updated
-    if (messagesCache[chatId]) messagesCache[chatId] = updated
+    var pk = String(chatId) + (activeTopic ? "_" + String(activeTopic.id) : "")
+    if (messagesCache[pk]) messagesCache[pk] = updated
   }
 
   function unpinMessage(chatId, messageId) {
@@ -504,7 +516,8 @@ Panel {
       updated.push(m)
     }
     activeMessages = updated
-    if (messagesCache[chatId]) messagesCache[chatId] = updated
+    var uk = String(chatId) + (activeTopic ? "_" + String(activeTopic.id) : "")
+    if (messagesCache[uk]) messagesCache[uk] = updated
   }
 
   // ---- Multi-Select Actions
@@ -677,6 +690,7 @@ Panel {
   function loadMessages(chatId) {
     if (!chatId) return
     _loadingChatKey = String(chatId) + (activeTopic ? "_" + String(activeTopic.id) : "")
+    _loadingTopicId = activeTopic ? String(activeTopic.id) : ""
     // Only show spinner if no cached messages
     if (!messagesCache[_loadingChatKey]) {
       loadingMessages = true
@@ -702,7 +716,7 @@ Panel {
     var repText = replyingTo ? (replyingTo.text || (replyingTo.media_type ? "Media" : "")) : ""
     
     var optMsg = {
-      id: Date.now(),
+      id: Date.now() * 1000 + ((_optimisticSeq++) % 1000),
       chat_id: cid,
       sender_name: userName || "You",
       sender_avatar: userAvatar,
@@ -766,7 +780,7 @@ Panel {
   }
 
   function loadPickerFiles(tab) {
-    filePickerTab = tab
+    if (tab === "pictures" || tab === "downloads" || tab === "home") filePickerTab = tab
     pickerSearchQuery = ""
     pickerFilesProc.running = false
     pickerFilesProc.command = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "list_files", tab]
@@ -841,7 +855,7 @@ Panel {
     var repText = replyingTo ? (replyingTo.text || (replyingTo.media_type ? "Media" : "")) : ""
 
     var optMsg = {
-      id: Date.now(),
+      id: Date.now() * 1000 + ((_optimisticSeq++) % 1000),
       chat_id: cid,
       sender_name: userName || "You",
       sender_avatar: userAvatar,
@@ -886,17 +900,16 @@ Panel {
     actionProc.command = args
     actionProc.running = true
 
-    var updated = []
-    var unreadDelta = 0
+    var target = null
     for (var i = 0; i < allChats.length; i++) {
-      var c = Object.assign({}, allChats[i])
-      if (String(c.id) === String(chatId)) {
-        unreadDelta = c.unread_count || 0
-        c.unread_count = 0
+      if (String(allChats[i].id) === String(chatId)) {
+        target = allChats[i]
+        break
       }
-      updated.push(c)
     }
-    allChats = updated
+    if (!target || !target.unread_count) return
+    var unreadDelta = target.unread_count || 0
+    target.unread_count = 0
     filterChatsList()
     if (unreadDelta > 0) {
       unreadCount = Math.max(0, unreadCount - unreadDelta)
@@ -997,6 +1010,18 @@ Panel {
             if (root._lastChatsDigest !== digest) {
               root._lastChatsDigest = digest
               root.allChats = d.chats
+              if (root.selectedChat) {
+                for (var si = 0; si < d.chats.length; si++) {
+                  if (String(d.chats[si].id) === String(root.selectedChat.id)) {
+                    root.selectedChat = d.chats[si]
+                    break
+                  }
+                }
+              }
+            }
+            if (root._pendingChatId !== null && root._pendingChatId !== undefined) {
+              root.selectChatById(root._pendingChatId)
+              if (root.selectedChat && String(root.selectedChat.id) === String(root._pendingChatId)) root._pendingChatId = null
             }
             var count = 0
             if (d.chats) {
@@ -1013,6 +1038,8 @@ Panel {
 
   property string _lastMsgDigest: ""
   property string _loadingChatKey: ""
+  property string _loadingTopicId: ""
+  property string _dlTopicId: ""
 
 
   Process {
@@ -1023,10 +1050,10 @@ Panel {
         try {
           var d = JSON.parse(text || "{}")
           if (d.success && d.messages && d.chat_id) {
-            var respKey = String(d.chat_id) + (root.activeTopic ? "_" + String(root.activeTopic.id) : "")
+            var respKey = String(d.chat_id) + (root._loadingTopicId ? "_" + root._loadingTopicId : "")
             root.messagesCache[respKey] = d.messages
             // Only update if this response is for the chat we're currently viewing
-            if (root.selectedChat && (respKey === root._loadingChatKey || String(root.selectedChat.id) === String(d.chat_id))) {
+            if (root.selectedChat && respKey === root._loadingChatKey) {
               var digest = JSON.stringify(d.messages || [])
               // Skip reassigning activeMessages when nothing changed: a JS-array
               // model reassignment resets the ListView's contentY, which snaps the
@@ -1196,7 +1223,7 @@ Panel {
                 msgs.push(m)
               }
               root.activeMessages = msgs
-              var cacheKey = String(d.chat_id) + (root.activeTopic ? "_" + String(root.activeTopic.id) : "")
+              var cacheKey = String(d.chat_id) + (root._dlTopicId ? "_" + root._dlTopicId : "")
               if (root.messagesCache[cacheKey]) root.messagesCache[cacheKey] = msgs
             }
           }
@@ -1225,7 +1252,9 @@ Panel {
     function toggle() { root.toggle() }
     function chat(chatId) {
       root.openFromHotkey()
+      root._pendingChatId = chatId
       root.selectChatById(chatId)
+      if (root.selectedChat && String(root.selectedChat.id) === String(chatId)) root._pendingChatId = null
     }
     function refresh() {
       root.refresh()
@@ -1523,6 +1552,7 @@ Panel {
                   Text {
                     visible: !modelData.avatar
                     anchors.centerIn: parent
+                    textFormat: Text.PlainText
                     text: modelData.initials || "TG"
                     color: Color.accent
                     font.family: root.fontFamily

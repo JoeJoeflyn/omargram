@@ -566,12 +566,14 @@ Item {
       function snapAndRemove() {
         if (msgRow.isSnapping) return
         msgRow.isSnapping = true
-        
+        var cid = p.selectedChat ? p.selectedChat.id : null
+        var mid = modelData.id
+
         var mapped = bubbleSurface.mapToItem(thanosOverlay, 0, 0)
         var col = msgRow.isOut ? Color.accent : Qt.rgba(p.foreground.r, p.foreground.g, p.foreground.b, 0.85)
-        
+
         thanosOverlay.disintegrate(mapped.x, mapped.y, bubbleSurface.width, bubbleSurface.height, col, function() {
-          p.deleteMessage(p.selectedChat.id, modelData.id)
+          p.deleteMessage(cid, mid)
         })
       }
 
@@ -674,6 +676,8 @@ Item {
               var pt = bubbleMouse.mapToItem(root, mouse.x, mouse.y)
               msgContextMenu.targetMsg = modelData
               msgContextMenu.targetRow = msgRow
+              msgContextMenu.targetChatId = p.selectedChat ? p.selectedChat.id : null
+              msgContextMenu.targetMsgId = modelData.id
               msgContextMenu.showAt(pt.x, pt.y)
             }
           }
@@ -756,6 +760,8 @@ Item {
                   var pt = replyQuoteBox.mapToItem(root, mouse.x, mouse.y)
                   msgContextMenu.targetMsg = modelData
                   msgContextMenu.targetRow = msgRow
+                  msgContextMenu.targetChatId = p.selectedChat ? p.selectedChat.id : null
+                  msgContextMenu.targetMsgId = modelData.id
                   msgContextMenu.showAt(pt.x, pt.y)
                 }
               }
@@ -1313,7 +1319,7 @@ Item {
     enabled: false
     property var particles: []
     property bool running: false
-    property var onFinishedCallback: null
+    property var onFinishedQueue: []
 
     Canvas {
       id: particleCanvas
@@ -1367,17 +1373,17 @@ Item {
       interval: 480
       repeat: false
       onTriggered: {
-        if (typeof thanosOverlay.onFinishedCallback === "function") {
-          var cb = thanosOverlay.onFinishedCallback
-          thanosOverlay.onFinishedCallback = null
-          cb()
+        var q = thanosOverlay.onFinishedQueue
+        thanosOverlay.onFinishedQueue = []
+        for (var i = 0; i < q.length; i++) {
+          if (typeof q[i] === "function") q[i]()
         }
       }
     }
 
     function disintegrate(startX, startY, w, h, baseColor, callback) {
-      onFinishedCallback = callback
-      completeTimer.start()
+      if (typeof callback === "function") onFinishedQueue.push(callback)
+      completeTimer.restart()
 
       var col = Color.accent
       if (baseColor) col = baseColor
@@ -1418,6 +1424,8 @@ Item {
 
     property var targetMsg: null
     property var targetRow: null
+    property var targetChatId: null
+    property var targetMsgId: null
     property real menuX: 0
     property real menuY: 0
 
@@ -1436,6 +1444,16 @@ Item {
     function hide() {
       targetMsg = null
       targetRow = null
+      targetChatId = null
+      targetMsgId = null
+    }
+
+    // Null when the delegate row was destroyed/recycled; never call methods on targetRow directly.
+    function liveRow() {
+      try {
+        if (targetRow && typeof targetRow.toggleReaction === "function") return targetRow
+      } catch (e) {}
+      return null
     }
 
     // Dismiss backdrop
@@ -1503,10 +1521,11 @@ Item {
                   hoverEnabled: true
                   cursorShape: Qt.PointingHandCursor
                   onClicked: {
-                    if (msgContextMenu.targetRow && typeof msgContextMenu.targetRow.toggleReaction === "function") {
-                      msgContextMenu.targetRow.toggleReaction(modelData)
+                    var row = msgContextMenu.liveRow()
+                    if (row) {
+                      row.toggleReaction(modelData)
                     } else if (msgContextMenu.targetMsg) {
-                      p.sendReactionBackend(p.selectedChat.id, msgContextMenu.targetMsg.id, modelData)
+                      p.sendReactionBackend(msgContextMenu.targetChatId !== null ? msgContextMenu.targetChatId : p.selectedChat.id, msgContextMenu.targetMsgId !== null ? msgContextMenu.targetMsgId : msgContextMenu.targetMsg.id, modelData)
                     }
                     msgContextMenu.hide()
                   }
@@ -1552,10 +1571,11 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
-              if (msgContextMenu.targetRow && typeof msgContextMenu.targetRow.toggleReaction === "function") {
-                msgContextMenu.targetRow.toggleReaction("clear")
+              var row2 = msgContextMenu.liveRow()
+              if (row2) {
+                row2.toggleReaction("clear")
               } else if (msgContextMenu.targetMsg) {
-                p.sendReactionBackend(p.selectedChat.id, msgContextMenu.targetMsg.id, "clear")
+                p.sendReactionBackend(msgContextMenu.targetChatId !== null ? msgContextMenu.targetChatId : p.selectedChat.id, msgContextMenu.targetMsgId !== null ? msgContextMenu.targetMsgId : msgContextMenu.targetMsg.id, "clear")
               }
               msgContextMenu.hide()
             }
@@ -1862,13 +1882,19 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
-              var row = msgContextMenu.targetRow
+              var row = msgContextMenu.liveRow()
               var msg = msgContextMenu.targetMsg
+              var cid = msgContextMenu.targetChatId !== null ? msgContextMenu.targetChatId : (p.selectedChat ? p.selectedChat.id : null)
+              var mid = msgContextMenu.targetMsgId !== null ? msgContextMenu.targetMsgId : (msg ? msg.id : null)
               msgContextMenu.hide()
               if (row && typeof row.snapAndRemove === "function") {
-                row.snapAndRemove()
-              } else if (msg) {
-                p.deleteMessage(p.selectedChat.id, msg.id)
+                try {
+                  row.snapAndRemove()
+                } catch (e) {
+                  if (msg && cid !== null) p.deleteMessage(cid, mid)
+                }
+              } else if (msg && cid !== null) {
+                p.deleteMessage(cid, mid)
               }
             }
           }
