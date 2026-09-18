@@ -51,6 +51,13 @@ if is_daemon_alive; then
     save_state
   fi
 else
+  # If daemon is not alive and in cooldown, fail fast (<1ms) without retry delay
+  if [ "$NOW" -lt "$COOLDOWN_UNTIL" ]; then
+    REMAINING=$((COOLDOWN_UNTIL - NOW))
+    echo "{\"success\":false,\"error\":\"daemon restart in cooldown ($REMAINING s remaining) — check $RUN_DIR/daemon.log\",\"cooldown\":true,\"fail_count\":$FAIL_COUNT,\"running\":false}"
+    exit 1
+  fi
+
   _alive=0
   for _try in 1 2 3; do
     if is_daemon_alive; then
@@ -67,13 +74,6 @@ else
       save_state
     fi
   else
-    # Daemon is not alive. Check if we are currently in restart cooldown
-    if [ "$NOW" -lt "$COOLDOWN_UNTIL" ]; then
-      REMAINING=$((COOLDOWN_UNTIL - NOW))
-      echo "{\"success\":false,\"error\":\"daemon restart in cooldown ($REMAINING s remaining) — check $RUN_DIR/daemon.log\",\"cooldown\":true,\"fail_count\":$FAIL_COUNT,\"running\":false}"
-      exit 1
-    fi
-
     mkdir -p "$RUN_DIR"
     exec 9>"$RUN_DIR/omargram.lock"
     if ! flock -n 9; then
