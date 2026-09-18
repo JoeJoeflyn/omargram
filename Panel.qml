@@ -108,9 +108,31 @@ Panel {
   readonly property bool messagesProcRunning: messagesProc.running
   readonly property bool dialogsProcRunning: dialogsProc.running
 
+  property int consecutiveFailures: 0
+  property bool daemonOffline: false
+
+  function updatePollInterval() {
+    if (consecutiveFailures <= 0) {
+      pollTimer.interval = root.opened ? 1500 : 6000
+    } else if (consecutiveFailures < 3) {
+      pollTimer.interval = 10000
+    } else if (consecutiveFailures < 6) {
+      pollTimer.interval = 30000
+    } else if (consecutiveFailures < 10) {
+      pollTimer.interval = 60000
+    } else {
+      pollTimer.interval = 300000
+    }
+  }
+
+  function resetFailures() {
+    consecutiveFailures = 0
+    daemonOffline = false
+    updatePollInterval()
+  }
+
   Component.onCompleted: {
     statusProc.running = true
-    dialogsProc.running = true
   }
 
   onSearchQueryChanged: filterChatsList()
@@ -141,12 +163,14 @@ Panel {
     openedFromHotkey = false
     setCenterHoverRevealSuppressed(false)
     root.controller.show()
+    root.resetFailures()
     root.refresh()
   }
 
   function openFromHotkey() {
     openedFromHotkey = true
     root.controller.show()
+    root.resetFailures()
     root.refresh()
     Qt.callLater(function() { if (root.opened) setCenterHoverRevealSuppressed(true) })
   }
@@ -154,6 +178,7 @@ Panel {
   function close() {
     setCenterHoverRevealSuppressed(false)
     root.controller.hide()
+    root.updatePollInterval()
   }
 
   function toggle() {
@@ -175,16 +200,18 @@ Panel {
   // ---- Actions
   function refresh() {
     if (!statusProc.running) statusProc.running = true
-    if (!dialogsProc.running) dialogsProc.running = true
-    // Background refresh — don't show loading spinner
-    if (selectedChat) {
-      _loadingChatKey = String(selectedChat.id) + (activeTopic ? "_" + String(activeTopic.id) : "")
-      _loadingTopicId = activeTopic ? String(activeTopic.id) : ""
-      messagesProc.running = false
-      var args = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "messages", String(selectedChat.id), "50"]
-      if (activeTopic) args.push(String(activeTopic.id))
-      messagesProc.command = args
-      messagesProc.running = true
+    if (!daemonOffline) {
+      if (!dialogsProc.running) dialogsProc.running = true
+      // Background refresh — don't show loading spinner
+      if (selectedChat) {
+        _loadingChatKey = String(selectedChat.id) + (activeTopic ? "_" + String(activeTopic.id) : "")
+        _loadingTopicId = activeTopic ? String(activeTopic.id) : ""
+        messagesProc.running = false
+        var args = [Qt.resolvedUrl("omargram_sock.sh").toString().replace("file://", ""), "messages", String(selectedChat.id), "50"]
+        if (activeTopic) args.push(String(activeTopic.id))
+        messagesProc.command = args
+        messagesProc.running = true
+      }
     }
   }
 
@@ -969,6 +996,7 @@ Panel {
           var d = JSON.parse(text || "{}")
           var wasAuth = root.isAuthorized
           if (d.running === true) {
+            root.resetFailures()
             root.isAuthorized = d.authorized === true
             root.unreadCount = d.unread_total || 0
             if (d.user) {
@@ -982,8 +1010,16 @@ Panel {
             } else if (!wasAuth && root.isAuthorized) {
               dialogsProc.running = true
             }
+          } else {
+            root.consecutiveFailures++
+            root.daemonOffline = true
+            root.updatePollInterval()
           }
-        } catch (e) {}
+        } catch (e) {
+          root.consecutiveFailures++
+          root.daemonOffline = true
+          root.updatePollInterval()
+        }
       }
     }
   }
@@ -999,6 +1035,7 @@ Panel {
         try {
           var d = JSON.parse(text || "{}")
           if (d.success && d.chats) {
+            root.resetFailures()
             if (root.selectedChat) {
               for (var k = 0; k < d.chats.length; k++) {
                 if (String(d.chats[k].id) === String(root.selectedChat.id)) {
@@ -1030,8 +1067,16 @@ Panel {
               }
             }
             root.unreadCount = count
+          } else if (d.cooldown || d.fail_count || !d.success) {
+            root.consecutiveFailures++
+            root.daemonOffline = true
+            root.updatePollInterval()
           }
-        } catch (e) {}
+        } catch (e) {
+          root.consecutiveFailures++
+          root.daemonOffline = true
+          root.updatePollInterval()
+        }
       }
     }
   }
@@ -1274,7 +1319,10 @@ Panel {
 
     onOpenChanged: {
       if (open) {
+        root.resetFailures()
         root.refresh()
+      } else {
+        root.updatePollInterval()
       }
     }
 

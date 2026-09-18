@@ -122,9 +122,25 @@ def find_python():
 
 DAEMON_PYTHON = find_python()
 
+def is_in_cooldown():
+    state_file = os.path.join(OMARGRAM_RUN_DIR, "restart_state")
+    if not os.path.exists(state_file):
+        return False
+    try:
+        with open(state_file, "r") as f:
+            for line in f:
+                if line.startswith("COOLDOWN_UNTIL="):
+                    cd = int(line.strip().split("=")[1])
+                    return time.time() < cd
+    except Exception:
+        pass
+    return False
+
 def ensure_daemon_running():
     if is_daemon_running():
         return True
+    if is_in_cooldown():
+        return False
     os.makedirs(OMARGRAM_RUN_DIR, mode=0o700, exist_ok=True)
     try:
         os.chmod(OMARGRAM_RUN_DIR, 0o700)
