@@ -150,6 +150,17 @@ class OmarGramDaemon:
         while len(self.cached_senders) > 2000:
             self.cached_senders.pop(next(iter(self.cached_senders)), None)
 
+    async def _init_telegram(self):
+        try:
+            if not self.client.is_connected():
+                await self.client.connect()
+            if await self.client.is_user_authorized():
+                await self.update_unread_count()
+                asyncio.create_task(self.refresh_dialogs_cache())
+                self.notify_shell_refresh()
+        except Exception as e:
+            print(f"Telegram connection error on daemon init: {e}", file=sys.stderr)
+
     async def start(self):
         # Save PID file with strict permissions
         pid_payload = json.dumps({
@@ -160,9 +171,6 @@ class OmarGramDaemon:
         fd = os.open(PID_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with open(fd, "w", encoding="utf-8") as f:
             f.write(pid_payload)
-
-        # Connect to Telegram
-        await self.client.connect()
 
         # Register live event listeners
         @self.client.on(events.NewMessage)
@@ -225,7 +233,7 @@ class OmarGramDaemon:
             asyncio.create_task(self.refresh_dialogs_cache())
             self.notify_shell_refresh()
 
-        # Start Unix Socket Server
+        # Start Unix Socket Server FIRST so daemon responds immediately and doesn't get restarted in a loop
         if os.path.exists(SOCK_PATH):
             try:
                 os.unlink(SOCK_PATH)
@@ -239,7 +247,9 @@ class OmarGramDaemon:
             print(f"Warning: chmod {SOCK_PATH} failed: {e}", file=sys.stderr)
 
         print(f"OmarGram daemon listening on {SOCK_PATH}")
-        asyncio.create_task(self.refresh_dialogs_cache())
+
+        # Connect to Telegram in background
+        asyncio.create_task(self._init_telegram())
 
         async with server:
             while self.running:
@@ -285,10 +295,10 @@ class OmarGramDaemon:
             pass
 
     async def update_unread_count(self):
-        if not await self.client.is_user_authorized():
-            self.unread_total = 0
-            return 0
         try:
+            if not self.client.is_connected() or not await self.client.is_user_authorized():
+                self.unread_total = 0
+                return 0
             dialogs = await self.client.get_dialogs(limit=50)
             total = sum(d.unread_count or 0 for d in dialogs)
             self.unread_total = total
@@ -321,10 +331,10 @@ class OmarGramDaemon:
         return ""
 
     async def refresh_dialogs_cache(self, limit=40):
-        if not await self.client.is_user_authorized():
-            self.dialogs_cache = []
-            return []
         try:
+            if not self.client.is_connected() or not await self.client.is_user_authorized():
+                self.dialogs_cache = []
+                return []
             dialogs = await self.client.get_dialogs(limit=limit)
             result = []
             total_unread = 0
@@ -870,28 +880,49 @@ class OmarGramDaemon:
         action = cmd_dict.get("action", "")
         
         if action == "status":
-            is_auth = await self.client.is_user_authorized()
-            user_info = None
-            if is_auth:
-                me = await self.client.get_me()
-                if me:
-                    me_avatar = await self.get_chat_avatar(me)
-                    my_name = f"{me.first_name or ''} {me.last_name or ''}".strip() or me.username or "Me"
-                    user_info = {
-                        "id": me.id,
-                        "name": my_name,
-                        "username": me.username or "",
-                        "phone": me.phone or "",
-                        "avatar": me_avatar,
-                        "initials": get_initials(my_name)
-                    }
-            return {
-                "running": True,
-                "authorized": is_auth,
-                "user": user_info,
-                "unread_total": self.unread_total,
-                "chats_count": len(self.dialogs_cache)
-            }
+            try:
+                is_connected = self.client.is_connected()
+                if not is_connected:
+                    try:
+                        await self.client.connect()
+                        is_connected = self.client.is_connected()
+                    except Exception:
+                        pass
+                is_auth = await self.client.is_user_authorized() if is_connected else False
+                user_info = None
+                if is_auth:
+                    try:
+                        me = await self.client.get_me()
+                        if me:
+                            me_avatar = await self.get_chat_avatar(me)
+                            my_name = f"{me.first_name or ''} {me.last_name or ''}".strip() or me.username or "Me"
+                            user_info = {
+                                "id": me.id,
+                                "name": my_name,
+                                "username": me.username or "",
+                                "phone": me.phone or "",
+                                "avatar": me_avatar,
+                                "initials": get_initials(my_name)
+                            }
+                    except Exception as me_err:
+                        print(f"Error fetching user info in status: {me_err}", file=sys.stderr)
+                return {
+                    "running": True,
+                    "connected": is_connected,
+                    "authorized": is_auth,
+                    "user": user_info,
+                    "unread_total": self.unread_total,
+                    "chats_count": len(self.dialogs_cache)
+                }
+            except Exception as e:
+                return {
+                    "running": True,
+                    "connected": False,
+                    "authorized": False,
+                    "error": str(e),
+                    "unread_total": self.unread_total,
+                    "chats_count": len(self.dialogs_cache)
+                }
 
         elif action == "delete_chat":
             chat_id = cmd_dict.get("chat_id")
