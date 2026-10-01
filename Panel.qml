@@ -401,15 +401,11 @@ Panel {
     replyingTo = null
   }
 
-  Process {
-    id: copyProc
-  }
-
+  // wl-copy daemonizes to serve the clipboard; a managed Process reaps the
+  // detached child on exit, silently revoking the selection. Must stay detached.
   function copyToClipboard(text) {
     if (!text) return
-    copyProc.running = false
-    copyProc.command = ["wl-copy", text]
-    copyProc.running = true
+    Quickshell.execDetached(["wl-copy", text])
   }
 
   function closeActiveChat() {
