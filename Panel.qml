@@ -193,7 +193,9 @@ Panel {
   }
 
   function setCenterHoverRevealSuppressed(value) {
-    if (root.bar && "centerHoverRevealSuppressed" in root.bar)
+    if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function")
+      root.bar.setCenterHoverRevealSuppressed(value)
+    else if (root.bar && "centerHoverRevealSuppressed" in root.bar)
       root.bar.centerHoverRevealSuppressed = value
   }
 
@@ -1291,7 +1293,7 @@ Panel {
     function open() { root.openFromHotkey() }
     function close() { root.close() }
     function toggle() { root.toggle() }
-    function chat(chatId) {
+    function chat(chatId: string) {
       root.openFromHotkey()
       root._pendingChatId = chatId
       root.selectChatById(chatId)
